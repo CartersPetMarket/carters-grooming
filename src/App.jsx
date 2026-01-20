@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Calendar, Dog, User, LogOut, Phone, Mail, Check, CheckCircle2, PawPrint, Clock, Star, ArrowRight, Menu, X, Plus, Minus, Upload, FileText, AlertTriangle, Settings, ChevronLeft, ChevronRight, Search, UserPlus, ShieldAlert } from 'lucide-react';
+import { Calendar, Dog, User, LogOut, Phone, Mail, Check, CheckCircle2, PawPrint, Clock, Star, ArrowRight, Menu, X, Plus, Minus, Upload, FileText, AlertTriangle, Settings, ChevronLeft, ChevronRight, Search, UserPlus, ShieldAlert, Trash2 } from 'lucide-react';
 
 const supabase = createClient(
   'https://wpvoejdfvuhsrfderhpo.supabase.co',
@@ -212,6 +212,7 @@ export default function App() {
   const [groomers, setGroomers] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [pastBookings, setPastBookings] = useState([]);
   const [allBookings, setAllBookings] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedDog, setSelectedDog] = useState(null);
@@ -313,6 +314,14 @@ export default function App() {
   const [bookingPinError, setBookingPinError] = useState('');
   const [pendingBookingSlot, setPendingBookingSlot] = useState(null);
 
+  // Booking confirmation
+  const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
+  const [confirmationSlot, setConfirmationSlot] = useState(null);
+
+  // Booking success
+  const [showBookingSuccess, setShowBookingSuccess] = useState(false);
+  const [completedBooking, setCompletedBooking] = useState(null);
+
   const isAdmin = user && ADMIN_EMAILS.includes(user.email?.toLowerCase());
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -375,7 +384,7 @@ export default function App() {
   };
 
   const loadUserData = async (userId) => {
-    const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId);
+    const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
     setDogs(dogsData || []);
     const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
     setGroomers(groomersData || []);
@@ -388,6 +397,9 @@ export default function App() {
     setAllServices(servicesData || []);
     const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
     setBookings(bookingsData || []);
+    // Load past completed bookings
+    const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
+    setPastBookings(pastData || []);
     // Load vaccinations from database
     const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
     const vaxMap = {};
@@ -594,6 +606,18 @@ export default function App() {
     } catch (error) { alert(error.message); }
   };
 
+  const handleRemoveDog = async (dog) => {
+    const confirmed = window.confirm(`Remove ${dog.name} from your account?\n\nThis will hide ${dog.name} from your pet list. This action can be undone by contacting us.`);
+    if (!confirmed) return;
+    try {
+      // Soft delete - mark as inactive rather than deleting
+      const { error } = await supabase.from('dogs').update({ active: false }).eq('id', dog.id);
+      if (error) throw error;
+      setDogs(dogs.filter(d => d.id !== dog.id));
+      if (selectedDog?.id === dog.id) setSelectedDog(null);
+    } catch (error) { alert('Error removing pet: ' + error.message); }
+  };
+
   const getVaccinationFileUrl = async (filePath) => {
     if (!filePath) return null;
     const { data, error } = await supabase.storage.from('vaccinations').createSignedUrl(filePath, 3600); // 1 hour expiry
@@ -711,10 +735,30 @@ export default function App() {
         }, customerData.phone);
       }
       
-      alert('Booking confirmed!');
+      // Store completed booking details for success screen
+      const serviceName = allServices.find(s => s.id === selectedService)?.name || 'Service';
+      setCompletedBooking({
+        petName: selectedDog.name,
+        petBreed: selectedDog.breed,
+        service: serviceName,
+        date: selectedDate,
+        time: slot.time,
+        groomer: slot.groomer,
+        addOns: selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean)
+      });
+      
+      setShowBookingConfirmation(false);
+      setConfirmationSlot(null);
+      setShowBookingSuccess(true);
+      
       await loadUserData(user.id);
       setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes('');
     } catch (error) { alert(error.message); }
+  };
+
+  const showConfirmation = (slot) => {
+    setConfirmationSlot(slot);
+    setShowBookingConfirmation(true);
   };
 
   const getServicePrice = (serviceType) => {
@@ -975,6 +1019,189 @@ export default function App() {
     );
   };
 
+  // Customer Booking Confirmation Modal
+  const BookingConfirmationModal = () => {
+    if (!showBookingConfirmation || !confirmationSlot) return null;
+    
+    const serviceName = allServices.find(s => s.id === selectedService)?.name || 'Service';
+    const servicePrice = serviceName.includes('Bath') ? bathPrice : groomPrice;
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 max-w-lg w-full border-4 border-red-600 max-h-[90vh] overflow-y-auto">
+          <div className="text-center mb-6">
+            <div className="w-16 sm:w-20 h-16 sm:h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Calendar className="text-white" size={32} />
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-gray-900">Confirm Your Appointment</h3>
+            <p className="text-gray-600 mt-2">Please review your booking details</p>
+          </div>
+          
+          <div className="space-y-4 mb-6">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Pet</p>
+                  <p className="text-lg font-bold text-gray-900">{selectedDog?.name}</p>
+                  <p className="text-sm text-gray-600">{selectedDog?.breed}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Service</p>
+                  <p className="text-lg font-bold text-gray-900">{serviceName}</p>
+                  <p className="text-sm text-red-600 font-semibold">{formatPrice(servicePrice)}*</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-4 border-2 border-red-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Date</p>
+                  <p className="text-lg font-bold text-gray-900">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Time</p>
+                  <p className="text-lg font-bold text-gray-900">{confirmationSlot.time}</p>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-red-200">
+                <p className="text-xs text-gray-500 uppercase font-bold">Groomer</p>
+                <p className="text-lg font-bold text-gray-900">{confirmationSlot.groomer}</p>
+              </div>
+            </div>
+            
+            {selectedAddOns.length > 0 && (
+              <div className="bg-green-50 rounded-xl p-4 border-2 border-green-200">
+                <p className="text-xs text-gray-500 uppercase font-bold mb-2">Add-Ons</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedAddOns.map(id => {
+                    const addon = ADD_ON_SERVICES.find(s => s.id === id);
+                    return <span key={id} className="px-2 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full">{addon?.name} (+${addon?.price})</span>;
+                  })}
+                </div>
+                <p className="text-right font-bold text-green-700 mt-2">Add-ons: +${getAddOnsTotal()}</p>
+              </div>
+            )}
+            
+            {hasSpecialNeeds && bookingNotes && (
+              <div className="bg-amber-50 rounded-xl p-4 border-2 border-amber-200">
+                <p className="text-xs text-gray-500 uppercase font-bold mb-1">Special Notes</p>
+                <p className="text-sm text-gray-700">{bookingNotes}</p>
+              </div>
+            )}
+          </div>
+          
+          <p className="text-xs text-gray-400 italic text-center mb-4">*Price is an estimate. Final price may vary based on coat condition.</p>
+          
+          <div className="space-y-3">
+            <button 
+              onClick={() => handleBooking(confirmationSlot)}
+              className="w-full py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-black text-lg rounded-xl transition shadow-lg"
+            >
+              ✓ Confirm Booking
+            </button>
+            <button 
+              onClick={() => { setShowBookingConfirmation(false); setConfirmationSlot(null); }}
+              className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+            >
+              ← Go Back & Edit
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Booking Success Modal
+  const BookingSuccessModal = () => {
+    if (!showBookingSuccess || !completedBooking) return null;
+    
+    const formattedDate = new Date(completedBooking.date).toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="text-center mb-6">
+            <div className="w-20 sm:w-24 h-20 sm:h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+              <CheckCircle2 className="text-white" size={48} />
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-gray-900">You're All Set! 🎉</h3>
+            <p className="text-gray-600 mt-2">Your appointment has been booked</p>
+          </div>
+          
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 sm:p-6 border-2 border-green-200 mb-6">
+            <div className="text-center mb-4 pb-4 border-b border-green-200">
+              <p className="text-sm text-green-700 font-semibold uppercase">Appointment Details</p>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Pet</span>
+                <span className="font-bold text-gray-900">{completedBooking.petName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Service</span>
+                <span className="font-bold text-gray-900">{completedBooking.service}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Date</span>
+                <span className="font-bold text-gray-900">{formattedDate}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Time</span>
+                <span className="font-bold text-gray-900">{completedBooking.time}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600 font-medium">Groomer</span>
+                <span className="font-bold text-gray-900">{completedBooking.groomer}</span>
+              </div>
+              {completedBooking.addOns.length > 0 && (
+                <div className="pt-3 border-t border-green-200">
+                  <span className="text-gray-600 font-medium">Add-Ons</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {completedBooking.addOns.map((addon, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">{addon}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200 mb-6">
+            <div className="flex items-start gap-3">
+              <Phone className="text-blue-600 flex-shrink-0 mt-1" size={20} />
+              <div>
+                <p className="font-bold text-blue-900">Need to make changes?</p>
+                <p className="text-sm text-blue-700">Call us at <a href="tel:+17132537718" className="font-bold underline">(713) 253-7718</a> to reschedule or cancel.</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            <button 
+              onClick={() => { setShowBookingSuccess(false); setCompletedBooking(null); }}
+              className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-black text-lg rounded-xl transition shadow-lg"
+            >
+              Done
+            </button>
+            <button 
+              onClick={() => { setShowBookingSuccess(false); setCompletedBooking(null); }}
+              className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition"
+            >
+              Book Another Appointment
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Front Desk: Book appointment (supports multiple pets)
   const handleFrontDeskBooking = async (slot, staffMember) => {
     try {
@@ -1163,7 +1390,7 @@ export default function App() {
     }
   };
 
-  const getBookingsForDate = (date) => allBookings.filter(b => b.appointment_date === date);
+  const getBookingsForDate = (date) => allBookings.filter(b => b.appointment_date === date && b.status !== 'canceled' && b.status !== 'no_show');
 
   // Password Reset Page - check FIRST before anything else
   if (showResetPassword) {
@@ -3211,6 +3438,8 @@ export default function App() {
       <VaccinationModal />
       <PinModal />
       <BookingPinModal />
+      <BookingConfirmationModal />
+      <BookingSuccessModal />
       {showCallPopup && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-red-600"><div className="text-center"><div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><Phone className="text-white" size={40} /></div><h3 className="text-3xl font-black text-gray-900 mb-4">Can't Find a Time?</h3><p className="text-gray-700 text-lg mb-6">Give us a call and we'll do our best to accommodate you!</p><a href="tel:+17132537718" className="block w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-4 rounded-xl font-bold text-xl mb-4 hover:from-red-700 hover:to-red-800 transition shadow-lg">(713) 253-7718</a><button onClick={() => setShowCallPopup(false)} className="w-full py-3 text-gray-600 font-semibold hover:text-gray-900 transition">Close</button></div></div></div>)}
       
       <div className="bg-gradient-to-r from-red-600 to-red-700 shadow-xl"><div className="max-w-7xl mx-auto px-4 py-4 sm:py-6"><div className="flex items-center justify-between"><div className="flex items-center gap-2 sm:gap-4"><img src="/logo.png" alt="Carter's Pet Market" className="h-10 sm:h-14 w-auto bg-white rounded-xl p-1" /><div><h1 className="text-xl sm:text-3xl font-black text-white">Carter's Pet Market</h1><p className="text-red-100 text-xs sm:text-sm font-medium hidden sm:block">Welcome back, {user.user_metadata?.name || user.email}!</p></div></div><div className="flex gap-2 sm:gap-3">{isAdmin && <button onClick={handleAdminAccess} className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold text-sm sm:text-base"><Settings size={18} /><span className="hidden sm:inline">Admin</span></button>}<button onClick={handleLogout} className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold backdrop-blur-sm text-sm sm:text-base"><LogOut size={18} /><span className="hidden sm:inline">Logout</span></button></div></div></div></div>
@@ -3221,7 +3450,7 @@ export default function App() {
         <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="lg:col-span-1"><div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 lg:sticky lg:top-4"><div className="flex justify-between items-center mb-4 sm:mb-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900">My Pets</h2><button onClick={() => setShowAddDog(!showAddDog)} className="bg-red-600 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-bold transition shadow-md hover:shadow-lg">{showAddDog ? 'Cancel' : '+ Add Pet'}</button></div>
             {showAddDog && (<div className="mb-4 sm:mb-6 p-4 sm:p-5 bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl border-2 border-red-200 space-y-3 sm:space-y-4"><input type="text" placeholder="Pet's Name" value={newDog.name} onChange={(e) => setNewDog({...newDog, name: e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500" /><select value={newDog.breed} onChange={(e) => setNewDog({...newDog, breed: e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500"><option value="">Select Breed</option>{Object.keys(BREED_DATABASE).filter(b => !b.startsWith('Mixed')).sort().map(breed => (<option key={breed} value={breed}>{breed}</option>))}<option disabled>──────────</option>{Object.keys(BREED_DATABASE).filter(b => b.startsWith('Mixed')).map(breed => (<option key={breed} value={breed}>{breed}</option>))}</select>{newDog.breed && (<div className={`p-3 rounded-xl text-center font-semibold text-sm ${BREED_DATABASE[newDog.breed]?.weight <= 35 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{BREED_DATABASE[newDog.breed]?.weight <= 35 ? '🐕 Small Dog' : '🐕‍🦺 Large Dog'} (avg {BREED_DATABASE[newDog.breed]?.weight} lbs)</div>)}<button onClick={handleAddDog} className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white p-3 rounded-xl font-bold shadow-md transition">Save Pet</button></div>)}
-            {dogs.length === 0 ? (<div className="text-center py-8 sm:py-12"><PawPrint className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-500 font-medium">No pets added yet</p><p className="text-gray-400 text-sm mt-2">Click "+ Add Pet" to get started</p></div>) : (<div className="space-y-3">{dogs.map(dog => { const vaxStatus = getDogVaxStatus(dog.id); return (<div key={dog.id} className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${selectedDog?.id === dog.id ? 'border-red-600 bg-gradient-to-br from-red-50 to-orange-50 shadow-lg' : 'border-gray-200 bg-white shadow-md'}`}><button onClick={() => { setSelectedDog(selectedDog?.id === dog.id ? null : dog); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); }} className="w-full text-left"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 sm:w-12 h-10 sm:h-12 rounded-full flex items-center justify-center ${selectedDog?.id === dog.id ? 'bg-red-600' : 'bg-gray-200'}`}><Dog className={selectedDog?.id === dog.id ? 'text-white' : 'text-gray-500'} size={20} /></div><div><div className="font-bold text-base sm:text-lg text-gray-900">{dog.name}</div><div className="text-sm text-gray-600">{dog.breed}</div></div></div>{selectedDog?.id === dog.id && (<CheckCircle2 className="text-red-600" size={24} />)}</div></button><div className="mt-3 pt-3 border-t border-gray-200"><div className="flex items-center justify-between"><div className="flex items-center gap-2">{vaxStatus.rabies ? <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full flex items-center gap-1"><Check size={12} />Rabies</span> : <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">Rabies needed</span>}</div><button onClick={() => { setVaccinationDog(dog); setShowVaccinationModal(true); }} className="text-sm text-blue-600 hover:text-blue-800 font-semibold">{vaxStatus.rabies ? 'Edit' : 'Add'} Records</button></div></div></div>);})}</div>)}
+            {dogs.length === 0 ? (<div className="text-center py-8 sm:py-12"><PawPrint className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-500 font-medium">No pets added yet</p><p className="text-gray-400 text-sm mt-2">Click "+ Add Pet" to get started</p></div>) : (<div className="space-y-3">{dogs.map(dog => { const vaxStatus = getDogVaxStatus(dog.id); return (<div key={dog.id} className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${selectedDog?.id === dog.id ? 'border-red-600 bg-gradient-to-br from-red-50 to-orange-50 shadow-lg' : 'border-gray-200 bg-white shadow-md'}`}><button onClick={() => { setSelectedDog(selectedDog?.id === dog.id ? null : dog); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); }} className="w-full text-left"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 sm:w-12 h-10 sm:h-12 rounded-full flex items-center justify-center ${selectedDog?.id === dog.id ? 'bg-red-600' : 'bg-gray-200'}`}><Dog className={selectedDog?.id === dog.id ? 'text-white' : 'text-gray-500'} size={20} /></div><div><div className="font-bold text-base sm:text-lg text-gray-900">{dog.name}</div><div className="text-sm text-gray-600">{dog.breed}</div></div></div>{selectedDog?.id === dog.id && (<CheckCircle2 className="text-red-600" size={24} />)}</div></button><div className="mt-3 pt-3 border-t border-gray-200"><div className="flex items-center justify-between"><div className="flex items-center gap-2">{vaxStatus.rabies ? <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full flex items-center gap-1"><Check size={12} />Rabies</span> : <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">Rabies needed</span>}</div><div className="flex items-center gap-2"><button onClick={() => handleRemoveDog(dog)} className="text-gray-400 hover:text-red-500 transition p-1" title="Remove pet"><Trash2 size={16} /></button><button onClick={() => { setVaccinationDog(dog); setShowVaccinationModal(true); }} className="text-sm text-blue-600 hover:text-blue-800 font-semibold">{vaxStatus.rabies ? 'Edit' : 'Add'} Records</button></div></div></div></div>);})}</div>)}
             {selectedDog && (<div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200"><div className="flex items-center gap-2"><CheckCircle2 className="text-green-600" size={20} /><span className="font-bold text-green-900">{selectedDog.name} selected</span></div></div>)}
           </div></div>
           
@@ -3273,10 +3502,12 @@ export default function App() {
                 <input type="date" min={getTodayDate()} value={selectedDate} onChange={(e) => (selectedDog && selectedService) && setSelectedDate(e.target.value)} disabled={!selectedDog || !selectedService} className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500 text-base sm:text-lg font-semibold" />
                 {(!selectedDog || !selectedService) && <p className="text-sm text-gray-500 mt-2">Select a pet and service first</p>}
               </div>
-              {selectedDate && selectedDog && selectedService && (<div><h3 className="font-bold text-lg text-gray-900 mb-4">Available Appointments</h3>{availableSlots.length === 0 ? (<div><div className="text-center py-8 sm:py-12 bg-gray-50 rounded-2xl mb-4"><Calendar className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-600 font-semibold mb-2">No appointments available</p><p className="text-gray-500 text-sm">Please try a different date</p></div><button onClick={() => setShowCallPopup(true)} className="w-full p-4 sm:p-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl font-bold text-base sm:text-lg transition shadow-lg flex items-center justify-center gap-3"><Phone size={24} />Can't Find a Time? Call Us!</button></div>) : (<><div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">{availableSlots.map((slot, idx) => (<button key={idx} onClick={() => handleBooking(slot)} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 border-gray-200 hover:border-red-500 bg-white hover:bg-gradient-to-br hover:from-red-50 hover:to-orange-50 transition-all text-left shadow-md hover:shadow-xl"><div className="flex items-center justify-between mb-2 sm:mb-3"><span className="text-xl sm:text-2xl font-black text-gray-900">{slot.time}</span></div><div className="text-xs sm:text-sm text-gray-600 font-semibold">with {slot.groomer}</div></button>))}</div><button onClick={() => setShowCallPopup(true)} className="w-full p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold transition border-2 border-blue-200 flex items-center justify-center gap-2 text-sm sm:text-base"><Phone size={20} />Don't see a time that works? Call us!</button></>)}</div>)}
+              {selectedDate && selectedDog && selectedService && (<div><h3 className="font-bold text-lg text-gray-900 mb-4">Available Appointments</h3>{availableSlots.length === 0 ? (<div><div className="text-center py-8 sm:py-12 bg-gray-50 rounded-2xl mb-4"><Calendar className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-600 font-semibold mb-2">No appointments available</p><p className="text-gray-500 text-sm">Please try a different date</p></div><button onClick={() => setShowCallPopup(true)} className="w-full p-4 sm:p-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl font-bold text-base sm:text-lg transition shadow-lg flex items-center justify-center gap-3"><Phone size={24} />Can't Find a Time? Call Us!</button></div>) : (<><div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">{availableSlots.map((slot, idx) => (<button key={idx} onClick={() => showConfirmation(slot)} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 border-gray-200 hover:border-red-500 bg-white hover:bg-gradient-to-br hover:from-red-50 hover:to-orange-50 transition-all text-left shadow-md hover:shadow-xl"><div className="flex items-center justify-between mb-2 sm:mb-3"><span className="text-xl sm:text-2xl font-black text-gray-900">{slot.time}</span></div><div className="text-xs sm:text-sm text-gray-600 font-semibold">with {slot.groomer}</div></button>))}</div><button onClick={() => setShowCallPopup(true)} className="w-full p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold transition border-2 border-blue-200 flex items-center justify-center gap-2 text-sm sm:text-base"><Phone size={20} />Don't see a time that works? Call us!</button></>)}</div>)}
             </div>
 
             {bookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Your Upcoming Appointments</h2><div className="space-y-3 sm:space-y-4">{bookings.map(booking => (<div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md"><div className="flex items-start justify-between gap-3"><div className="flex-1"><h3 className="font-black text-base sm:text-lg text-gray-900">{booking.dogs?.name}</h3><p className="text-gray-700 font-semibold mt-2 text-sm sm:text-base">📅 {new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p><p className="text-gray-700 font-semibold text-sm sm:text-base">🕐 {booking.appointment_time}</p><p className="text-gray-600 text-xs sm:text-sm mt-2">with {booking.groomers?.name} • {booking.services?.name}</p>{booking.notes && (<p className="text-gray-500 text-xs sm:text-sm mt-2 bg-white/50 p-2 rounded">📝 {booking.notes}</p>)}</div><div className="px-2 sm:px-4 py-1 sm:py-2 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full whitespace-nowrap">{booking.status}</div></div></div>))}</div></div>)}
+
+            {pastBookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Past Appointments</h2><div className="space-y-3 sm:space-y-4">{pastBookings.map(booking => (<div key={booking.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200"><div className="flex items-center justify-between gap-3"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-gray-900">{booking.dogs?.name}</h3><span className="text-gray-400">•</span><span className="text-sm text-gray-600">{booking.services?.name}</span></div><p className="text-sm text-gray-500 mt-1">{new Date(booking.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} with <span className="font-semibold text-gray-700">{booking.groomers?.name}</span></p></div><div className="flex-shrink-0"><span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">Completed</span></div></div></div>))}</div><p className="text-xs text-gray-400 mt-4 text-center">Showing last 10 completed appointments</p></div>)}
           </div>
         </div>
       </div>
