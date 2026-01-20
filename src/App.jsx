@@ -257,6 +257,11 @@ export default function App() {
   const [newSlotMaxDogs, setNewSlotMaxDogs] = useState(2);
   const [newSlotMaxLarge, setNewSlotMaxLarge] = useState(1);
   
+  // Custom charges for bookings
+  const [addingChargeToBooking, setAddingChargeToBooking] = useState(null);
+  const [newChargeName, setNewChargeName] = useState('');
+  const [newChargePrice, setNewChargePrice] = useState('');
+  
   // Date-based scheduling
   const [scheduleSlots, setScheduleSlots] = useState([]);
   const [scheduleViewDate, setScheduleViewDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1620,6 +1625,34 @@ export default function App() {
       setGroomerNotesText('');
     };
 
+    const addCustomCharge = async (bookingId) => {
+      if (!newChargeName || !newChargePrice) return;
+      const booking = allBookings.find(b => b.id === bookingId);
+      const existingCharges = booking?.extra_charges || [];
+      const newCharges = [...existingCharges, { name: newChargeName, price: parseFloat(newChargePrice) }];
+      await supabase.from('bookings').update({ extra_charges: newCharges }).eq('id', bookingId);
+      await loadAllBookings();
+      setAddingChargeToBooking(null);
+      setNewChargeName('');
+      setNewChargePrice('');
+    };
+
+    const removeCustomCharge = async (bookingId, chargeIndex) => {
+      const booking = allBookings.find(b => b.id === bookingId);
+      const existingCharges = booking?.extra_charges || [];
+      const newCharges = existingCharges.filter((_, idx) => idx !== chargeIndex);
+      await supabase.from('bookings').update({ extra_charges: newCharges }).eq('id', bookingId);
+      await loadAllBookings();
+    };
+
+    const getTodayBookings = () => {
+      const today = new Date().toISOString().split('T')[0];
+      return allBookings.filter(b => b.appointment_date === today && b.status !== 'canceled' && b.status !== 'no_show').sort((a, b) => {
+        const getMinutes = (time) => { const [t, period] = time.split(' '); let [h, m] = t.split(':').map(Number); if (period === 'PM' && h !== 12) h += 12; if (period === 'AM' && h === 12) h = 0; return h * 60 + (m || 0); };
+        return getMinutes(a.appointment_time) - getMinutes(b.appointment_time);
+      });
+    };
+
     const loadPetHistory = async (dogId) => {
       const { data } = await supabase.from('bookings').select('*, groomers(name), services(name)').eq('dog_id', dogId).order('appointment_date', { ascending: false });
       setPetHistory(data || []);
@@ -1665,6 +1698,9 @@ export default function App() {
         {/* Admin Tabs */}
         <div className="max-w-7xl mx-auto px-4 pt-6">
           <div className="flex gap-2 bg-white rounded-2xl p-2 shadow-lg flex-wrap">
+            <button onClick={() => { setAdminTab('today'); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📍 Today
+            </button>
             <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <Calendar size={20} className="inline mr-2" />Schedule
             </button>
@@ -1687,6 +1723,73 @@ export default function App() {
         </div>
         
         <div className="max-w-7xl mx-auto px-4 py-6">
+          {/* TODAY VIEW TAB */}
+          {adminTab === 'today' && (
+            <div className="space-y-4">
+              <div className="text-center mb-6">
+                <h2 className="text-4xl font-black text-gray-900">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h2>
+                <p className="text-xl text-gray-600 mt-2">{getTodayBookings().length} appointments today</p>
+              </div>
+              
+              {getTodayBookings().length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
+                  <Calendar className="mx-auto mb-4 text-gray-300" size={64} />
+                  <p className="text-2xl font-bold text-gray-400">No appointments today</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {getTodayBookings().map(booking => (
+                    <div key={booking.id} className={`p-6 rounded-2xl shadow-lg border-l-8 ${
+                      booking.status === 'completed' ? 'bg-green-50 border-green-500' :
+                      booking.status === 'in_progress' ? 'bg-blue-50 border-blue-500' :
+                      booking.status === 'checked_in' ? 'bg-purple-50 border-purple-500' :
+                      'bg-white border-yellow-400'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-6">
+                          <div className="text-center">
+                            <span className="text-3xl font-black text-gray-900">{booking.appointment_time}</span>
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-black text-gray-900">{booking.dogs?.name}</h3>
+                            <p className="text-lg text-gray-600">{booking.dogs?.breed} • {booking.services?.name}</p>
+                            <p className="text-gray-500">{booking.customers?.name} • {booking.customers?.phone}</p>
+                            {booking.dogs?.notes && <p className="mt-2 text-purple-700 bg-purple-100 px-3 py-1 rounded-lg text-sm inline-block">🐕 {booking.dogs.notes}</p>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-3">
+                          <span className={`px-4 py-2 text-lg font-bold rounded-full ${
+                            booking.status === 'completed' ? 'bg-green-500 text-white' :
+                            booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
+                            booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {booking.status === 'checked_in' ? '✓ Checked In' :
+                             booking.status === 'in_progress' ? '🔄 In Progress' : 
+                             booking.status === 'completed' ? '✅ Done' :
+                             '📅 Scheduled'}
+                          </span>
+                          <div className="flex gap-2">
+                            {booking.status === 'scheduled' && (
+                              <button onClick={() => updateBookingStatus(booking.id, 'checked_in', booking)} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg">✓ Check In</button>
+                            )}
+                            {booking.status === 'checked_in' && (
+                              <button onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg">🔄 Start</button>
+                            )}
+                            {booking.status === 'in_progress' && (
+                              <button onClick={() => updateBookingStatus(booking.id, 'completed', booking)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg">✅ Complete</button>
+                            )}
+                          </div>
+                          <span className="text-lg font-bold text-gray-600">{booking.groomers?.name}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* CALENDAR TAB */}
           {adminTab === 'calendar' && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -1724,11 +1827,13 @@ export default function App() {
                             <span className={`px-3 py-1 text-sm font-bold rounded-full ${
                               booking.status === 'completed' ? 'bg-green-500 text-white' :
                               booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
+                              booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
                               booking.status === 'no_show' ? 'bg-red-500 text-white' :
                               booking.status === 'cancelled' ? 'bg-gray-500 text-white' :
                               'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {booking.status === 'in_progress' ? '🔄 In Progress' : 
+                              {booking.status === 'checked_in' ? '✓ Checked In' :
+                               booking.status === 'in_progress' ? '🔄 In Progress' : 
                                booking.status === 'completed' ? '✅ Done' :
                                booking.status === 'no_show' ? '❌ No Show' :
                                booking.status === 'cancelled' ? '🚫 Cancelled' :
@@ -1779,6 +1884,39 @@ export default function App() {
                               );
                             })()}
                           </p>
+                          
+                          {/* Custom Charges / Add-ons */}
+                          <div className="mt-2 p-3 bg-orange-50 rounded-xl border-2 border-orange-200">
+                            <p className="text-xs font-bold text-orange-700 uppercase mb-2">💰 Extra Charges</p>
+                            {(booking.extra_charges || []).length > 0 && (
+                              <div className="space-y-1 mb-2">
+                                {booking.extra_charges.map((charge, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-white px-2 py-1 rounded">
+                                    <span className="text-sm text-gray-700">{charge.name}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-bold text-green-700">+${charge.price}</span>
+                                      <button onClick={() => removeCustomCharge(booking.id, idx)} className="text-red-500 hover:text-red-700 text-xs">✕</button>
+                                    </div>
+                                  </div>
+                                ))}
+                                <div className="text-right font-bold text-orange-700 text-sm pt-1 border-t border-orange-200">
+                                  Extra Total: +${booking.extra_charges.reduce((sum, c) => sum + c.price, 0)}
+                                </div>
+                              </div>
+                            )}
+                            {addingChargeToBooking === booking.id ? (
+                              <div className="flex gap-2 items-center">
+                                <input type="text" value={newChargeName} onChange={(e) => setNewChargeName(e.target.value)} placeholder="Matting, Skunk, etc." className="flex-1 p-2 border rounded text-sm" />
+                                <span className="text-gray-500">$</span>
+                                <input type="number" value={newChargePrice} onChange={(e) => setNewChargePrice(e.target.value)} placeholder="0" className="w-16 p-2 border rounded text-sm" />
+                                <button onClick={() => addCustomCharge(booking.id)} className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded text-sm">Add</button>
+                                <button onClick={() => { setAddingChargeToBooking(null); setNewChargeName(''); setNewChargePrice(''); }} className="px-2 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded text-sm">✕</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setAddingChargeToBooking(booking.id)} className="text-orange-600 hover:text-orange-800 font-semibold text-sm">+ Add Extra Charge</button>
+                            )}
+                          </div>
+                          
                           <p className="text-gray-600 text-sm mt-2">Owner: {booking.customers?.name} • {booking.customers?.phone} • {booking.customers?.email}</p>
                           <div className="mt-3 p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
                             <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Groomer Notes (for {booking.dogs?.name})</p>
@@ -1849,10 +1987,10 @@ export default function App() {
                               {booking.status === 'scheduled' && (
                                 <>
                                   <button 
-                                    onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm flex items-center gap-2"
+                                    onClick={() => updateBookingStatus(booking.id, 'checked_in', booking)}
+                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-sm flex items-center gap-2"
                                   >
-                                    🔄 Start Groom
+                                    ✓ Check In
                                   </button>
                                   <button 
                                     onClick={() => updateBookingStatus(booking.id, 'no_show', booking)}
@@ -1861,6 +1999,14 @@ export default function App() {
                                     No Show
                                   </button>
                                 </>
+                              )}
+                              {booking.status === 'checked_in' && (
+                                <button 
+                                  onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)}
+                                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm flex items-center gap-2"
+                                >
+                                  🔄 Start Groom
+                                </button>
                               )}
                               {booking.status === 'in_progress' && (
                                 <button 
