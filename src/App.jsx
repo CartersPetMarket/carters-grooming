@@ -1819,7 +1819,6 @@ export default function App() {
                     return getMinutes(a.appointment_time) - getMinutes(b.appointment_time);
                   }).map(booking => (
                     <div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
-                      <div className="flex-1">
                         {/* Header row - time and status */}
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xl sm:text-2xl font-black text-gray-900">{booking.appointment_time}</span>
@@ -2047,7 +2046,6 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                      </div>
                     </div>
                   ))}
                 </div>
