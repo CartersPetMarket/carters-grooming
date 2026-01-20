@@ -1697,27 +1697,27 @@ export default function App() {
 
         {/* Admin Tabs */}
         <div className="max-w-7xl mx-auto px-4 pt-6">
-          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 bg-white rounded-2xl p-2 shadow-lg">
-            <button onClick={() => { setAdminTab('today'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📍 <span className="hidden sm:inline">Today</span>
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 bg-white rounded-2xl p-2 shadow-lg">
+            <button onClick={() => { setAdminTab('today'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">📍</span><span className="hidden sm:inline">📍 Today</span>
             </button>
-            <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📅 <span className="hidden sm:inline">Schedule</span>
+            <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">📅</span><span className="hidden sm:inline">📅 Schedule</span>
             </button>
-            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPet(null); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📞 <span className="hidden sm:inline">Front Desk</span>
+            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPet(null); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">📞</span><span className="hidden sm:inline">📞 Front Desk</span>
             </button>
-            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              👤 <span className="hidden sm:inline">Customers</span>
+            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">👤</span><span className="hidden sm:inline">👤 Customers</span>
             </button>
-            <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📊 <span className="hidden sm:inline">Reports</span>
+            <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">📊</span><span className="hidden sm:inline">📊 Reports</span>
             </button>
-            <button onClick={() => { setAdminTab('activity'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'activity' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📋 <span className="hidden sm:inline">Activity</span>
+            <button onClick={() => { setAdminTab('activity'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'activity' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">📋</span><span className="hidden sm:inline">📋 Activity</span>
             </button>
-            <button onClick={() => { setAdminTab('settings'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'settings' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              ⚙️ <span className="hidden sm:inline">Settings</span>
+            <button onClick={() => { setAdminTab('settings'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'settings' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span className="sm:hidden">⚙️</span><span className="hidden sm:inline">⚙️ Settings</span>
             </button>
           </div>
         </div>
@@ -1841,24 +1841,19 @@ export default function App() {
                         </div>
                         
                         {/* Badges row */}
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs sm:text-sm font-bold rounded-full">{booking.groomers?.name}</span>
-                          <span className={`px-2 py-1 text-xs sm:text-sm font-bold rounded-full ${booking.dogs?.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
-                            {booking.dogs?.size === 'large' ? '🐕‍🦺 Large' : '🐕 Small'}
+                        <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-2">
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-bold rounded-full">{booking.groomers?.name}</span>
+                          <span className={`px-2 py-1 text-xs font-bold rounded-full ${booking.dogs?.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {booking.dogs?.size === 'large' ? '🐕‍🦺' : '🐕'}
                           </span>
                           {(() => {
                             const usage = getSlotUsage(booking.groomers?.id, booking.appointment_time, booking.appointment_date);
                             const isOverTotal = usage.totalDogs > usage.maxDogs;
                             const isOverLarge = usage.largeCount > usage.maxLarge;
                             return (
-                              <>
-                                <span className={`px-2 py-1 text-xs font-bold rounded-full ${isOverTotal ? 'bg-red-100 text-red-800' : usage.totalDogs === usage.maxDogs ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                                  {usage.totalDogs}/{usage.maxDogs} dogs
-                                </span>
-                                <span className={`hidden sm:inline px-2 py-1 text-xs font-bold rounded-full ${isOverLarge ? 'bg-red-100 text-red-800' : usage.largeCount === usage.maxLarge ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>
-                                  🐕‍🦺 {usage.largeCount}/{usage.maxLarge}
-                                </span>
-                              </>
+                              <span className={`hidden sm:inline px-2 py-1 text-xs font-bold rounded-full ${isOverTotal ? 'bg-red-100 text-red-800' : usage.totalDogs === usage.maxDogs ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                {usage.totalDogs}/{usage.maxDogs} dogs {isOverLarge ? '⚠️' : ''}
+                              </span>
                             );
                           })()}
                         </div>
@@ -1890,8 +1885,8 @@ export default function App() {
                             })()}
                           </p>
                           
-                          {/* Custom Charges / Add-ons */}
-                          <div className="mt-2 p-3 bg-orange-50 rounded-xl border-2 border-orange-200">
+                          {/* Custom Charges / Add-ons - hidden on mobile unless has charges */}
+                          <div className={`mt-2 p-2 sm:p-3 bg-orange-50 rounded-xl border-2 border-orange-200 ${(booking.extra_charges || []).length === 0 ? 'hidden sm:block' : ''}`}>
                             <p className="text-xs font-bold text-orange-700 uppercase mb-2">💰 Extra Charges</p>
                             {(booking.extra_charges || []).length > 0 && (
                               <div className="space-y-1 mb-2">
@@ -1929,30 +1924,31 @@ export default function App() {
                             <span className="hidden sm:inline"> • {booking.customers?.phone} • {booking.customers?.email}</span>
                             <div className="sm:hidden text-xs mt-1">{booking.customers?.phone}</div>
                           </div>
-                          <div className="mt-3 p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
-                            <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Groomer Notes (for {booking.dogs?.name})</p>
-                            {editingGroomerNotes === booking.dogs?.id ? (
+                          {/* Groomer Notes - condensed on mobile */}
+                          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
+                            {booking.dogs?.notes ? (
+                              <div>
+                                <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Notes</p>
+                                <p className="text-gray-700 text-sm">{booking.dogs.notes}</p>
+                                <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(booking.dogs?.notes || ''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-xs mt-1">✏️ Edit</button>
+                              </div>
+                            ) : editingGroomerNotes === booking.dogs?.id ? (
                               <div className="space-y-2">
-                                <textarea value={groomerNotesText} onChange={(e) => setGroomerNotesText(e.target.value)} placeholder="e.g., Sensitive ears, use #4 blade, prefers treats, needs breaks..." className="w-full p-2 border-2 border-gray-300 rounded-lg text-sm" rows={3} />
+                                <p className="text-xs font-bold text-purple-700 uppercase">🐕 Add Groomer Notes</p>
+                                <textarea value={groomerNotesText} onChange={(e) => setGroomerNotesText(e.target.value)} placeholder="Sensitive ears, use #4 blade, etc." className="w-full p-2 border-2 border-gray-300 rounded-lg text-sm" rows={2} />
                                 <div className="flex gap-2">
                                   <button onClick={() => saveGroomerNotesFromCard(booking.dogs?.id)} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-sm">Save</button>
                                   <button onClick={() => { setEditingGroomerNotes(null); setGroomerNotesText(''); }} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-sm">Cancel</button>
                                 </div>
                               </div>
                             ) : (
-                              <div>
-                                {booking.dogs?.notes ? (
-                                  <p className="text-gray-700 text-sm mb-2">{booking.dogs.notes}</p>
-                                ) : (
-                                  <p className="text-gray-400 text-sm italic mb-2">No groomer notes yet</p>
-                                )}
-                                <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(booking.dogs?.notes || ''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">✏️ {booking.dogs?.notes ? 'Edit' : 'Add Notes'}</button>
-                              </div>
+                              <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">🐕 + Add Groomer Notes</button>
                             )}
                           </div>
-                          {booking.notes && <p className="text-gray-500 text-sm mt-2 bg-yellow-50 p-2 rounded-lg">📝 {booking.notes}</p>}
+                          {booking.notes && <p className="text-gray-500 text-xs sm:text-sm mt-2 bg-yellow-50 p-2 rounded-lg">📝 {booking.notes}</p>}
                           
-                          <div className="mt-3">
+                          {/* Booking notes edit - desktop only */}
+                          <div className="hidden sm:block mt-3">
                             {editingNotes === booking.id ? (
                               <div className="space-y-2">
                                 <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add notes about this appointment..." className="w-full p-3 border-2 border-gray-300 rounded-xl text-sm" rows={3} />
@@ -1966,7 +1962,8 @@ export default function App() {
                             )}
                           </div>
                           
-                          <div className="mt-4 p-3 bg-white rounded-xl border border-gray-200">
+                          {/* Vaccination Status - desktop only */}
+                          <div className="hidden sm:block mt-4 p-3 bg-white rounded-xl border border-gray-200">
                             <p className="font-bold text-sm text-gray-700 mb-2">Vaccination Status:</p>
                             <div className="flex flex-wrap gap-2">
                               {booking.vaccination?.rabies_status ? (
