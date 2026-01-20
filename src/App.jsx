@@ -1697,27 +1697,27 @@ export default function App() {
 
         {/* Admin Tabs */}
         <div className="max-w-7xl mx-auto px-4 pt-6">
-          <div className="flex gap-2 bg-white rounded-2xl p-2 shadow-lg flex-wrap">
-            <button onClick={() => { setAdminTab('today'); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📍 Today
+          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 bg-white rounded-2xl p-2 shadow-lg">
+            <button onClick={() => { setAdminTab('today'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📍 <span className="hidden sm:inline">Today</span>
             </button>
-            <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <Calendar size={20} className="inline mr-2" />Schedule
+            <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📅 <span className="hidden sm:inline">Schedule</span>
             </button>
-            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPet(null); setFdPhoneSearch(''); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <Phone size={20} className="inline mr-2" />Front Desk
+            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPet(null); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📞 <span className="hidden sm:inline">Front Desk</span>
             </button>
-            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <User size={20} className="inline mr-2" />Customers
+            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              👤 <span className="hidden sm:inline">Customers</span>
             </button>
-            <button onClick={() => { setAdminTab('reports'); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <FileText size={20} className="inline mr-2" />Reports
+            <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📊 <span className="hidden sm:inline">Reports</span>
             </button>
-            <button onClick={() => { setAdminTab('activity'); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'activity' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              📋 Activity
+            <button onClick={() => { setAdminTab('activity'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'activity' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📋 <span className="hidden sm:inline">Activity</span>
             </button>
-            <button onClick={() => { setAdminTab('settings'); }} className={`flex-1 py-3 px-4 rounded-xl font-bold transition ${adminTab === 'settings' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <Settings size={20} className="inline mr-2" />Settings
+            <button onClick={() => { setAdminTab('settings'); }} className={`py-2 sm:py-3 px-2 sm:px-4 rounded-xl font-bold transition text-xs sm:text-base ${adminTab === 'settings' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              ⚙️ <span className="hidden sm:inline">Settings</span>
             </button>
           </div>
         </div>
@@ -1818,56 +1818,61 @@ export default function App() {
                     const getMinutes = (time) => { const [t, period] = time.split(' '); let [h, m] = t.split(':').map(Number); if (period === 'PM' && h !== 12) h += 12; if (period === 'AM' && h === 12) h = 0; return h * 60 + (m || 0); };
                     return getMinutes(a.appointment_time) - getMinutes(b.appointment_time);
                   }).map(booking => (
-                    <div key={booking.id} className="p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-4 mb-2">
-                            <span className="text-2xl font-black text-gray-900">{booking.appointment_time}</span>
-                            {/* Status Badge with Color */}
-                            <span className={`px-3 py-1 text-sm font-bold rounded-full ${
-                              booking.status === 'completed' ? 'bg-green-500 text-white' :
-                              booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
-                              booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
-                              booking.status === 'no_show' ? 'bg-red-500 text-white' :
-                              booking.status === 'cancelled' ? 'bg-gray-500 text-white' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {booking.status === 'checked_in' ? '✓ Checked In' :
-                               booking.status === 'in_progress' ? '🔄 In Progress' : 
-                               booking.status === 'completed' ? '✅ Done' :
-                               booking.status === 'no_show' ? '❌ No Show' :
-                               booking.status === 'cancelled' ? '🚫 Cancelled' :
-                               '📅 Scheduled'}
-                            </span>
-                            <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-bold rounded-full">{booking.groomers?.name}</span>
-                            <span className={`px-3 py-1 text-sm font-bold rounded-full ${booking.dogs?.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {booking.dogs?.size === 'large' ? '🐕‍🦺 Large' : '🐕 Small'}
-                            </span>
-                            {(() => {
-                              const usage = getSlotUsage(booking.groomers?.id, booking.appointment_time, booking.appointment_date);
-                              const isOverTotal = usage.totalDogs > usage.maxDogs;
-                              const isOverLarge = usage.largeCount > usage.maxLarge;
-                              return (
-                                <div className="flex gap-2">
-                                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${isOverTotal ? 'bg-red-100 text-red-800' : usage.totalDogs === usage.maxDogs ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                                    {usage.totalDogs}/{usage.maxDogs} dogs
-                                  </span>
-                                  <span className={`px-2 py-1 text-xs font-bold rounded-full ${isOverLarge ? 'bg-red-100 text-red-800' : usage.largeCount === usage.maxLarge ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>
-                                    🐕‍🦺 {usage.largeCount}/{usage.maxLarge}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <h3 className="font-bold text-xl text-gray-900">{booking.dogs?.name} <span className="font-normal text-gray-600">({booking.dogs?.breed})</span></h3>
-                          <p className="text-gray-700">Service: <span className="font-semibold">{booking.services?.name}</span></p>
-                          <p className="text-gray-700">
-                            Price: {(() => {
-                              const breedInfo = BREED_DATABASE[booking.dogs?.breed];
-                              const basePrice = booking.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
-                              const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
-                              const displayPrice = booking.actual_price !== null ? booking.actual_price : basePriceNum;
-                              return editingBookingPrice === booking.id ? (
+                    <div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+                      <div className="flex-1">
+                        {/* Header row - time and status */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xl sm:text-2xl font-black text-gray-900">{booking.appointment_time}</span>
+                          <span className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-bold rounded-full ${
+                            booking.status === 'completed' ? 'bg-green-500 text-white' :
+                            booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
+                            booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
+                            booking.status === 'no_show' ? 'bg-red-500 text-white' :
+                            booking.status === 'cancelled' ? 'bg-gray-500 text-white' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {booking.status === 'checked_in' ? '✓ Checked In' :
+                             booking.status === 'in_progress' ? '🔄 In Progress' : 
+                             booking.status === 'completed' ? '✅ Done' :
+                             booking.status === 'no_show' ? '❌ No Show' :
+                             booking.status === 'cancelled' ? '🚫 Cancelled' :
+                             '📅 Scheduled'}
+                          </span>
+                        </div>
+                        
+                        {/* Badges row */}
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs sm:text-sm font-bold rounded-full">{booking.groomers?.name}</span>
+                          <span className={`px-2 py-1 text-xs sm:text-sm font-bold rounded-full ${booking.dogs?.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {booking.dogs?.size === 'large' ? '🐕‍🦺 Large' : '🐕 Small'}
+                          </span>
+                          {(() => {
+                            const usage = getSlotUsage(booking.groomers?.id, booking.appointment_time, booking.appointment_date);
+                            const isOverTotal = usage.totalDogs > usage.maxDogs;
+                            const isOverLarge = usage.largeCount > usage.maxLarge;
+                            return (
+                              <>
+                                <span className={`px-2 py-1 text-xs font-bold rounded-full ${isOverTotal ? 'bg-red-100 text-red-800' : usage.totalDogs === usage.maxDogs ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                  {usage.totalDogs}/{usage.maxDogs} dogs
+                                </span>
+                                <span className={`hidden sm:inline px-2 py-1 text-xs font-bold rounded-full ${isOverLarge ? 'bg-red-100 text-red-800' : usage.largeCount === usage.maxLarge ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>
+                                  🐕‍🦺 {usage.largeCount}/{usage.maxLarge}
+                                </span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        
+                        {/* Pet info */}
+                        <h3 className="font-bold text-lg sm:text-xl text-gray-900">{booking.dogs?.name} <span className="font-normal text-gray-600">({booking.dogs?.breed})</span></h3>
+                        <p className="text-gray-700 text-sm sm:text-base">Service: <span className="font-semibold">{booking.services?.name}</span></p>
+                        <p className="text-gray-700 text-sm sm:text-base">
+                          Price: {(() => {
+                            const breedInfo = BREED_DATABASE[booking.dogs?.breed];
+                            const basePrice = booking.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
+                            const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
+                            const displayPrice = booking.actual_price !== null ? booking.actual_price : basePriceNum;
+                            return editingBookingPrice === booking.id ? (
                                 <span className="inline-flex items-center gap-1 ml-1">
                                   $<input type="number" value={bookingPriceValue} onChange={(e) => setBookingPriceValue(e.target.value)} className="w-20 p-1 border rounded" />
                                   <button onClick={async () => {
@@ -1905,19 +1910,25 @@ export default function App() {
                               </div>
                             )}
                             {addingChargeToBooking === booking.id ? (
-                              <div className="flex gap-2 items-center">
+                              <div className="flex flex-col sm:flex-row gap-2">
                                 <input type="text" value={newChargeName} onChange={(e) => setNewChargeName(e.target.value)} placeholder="Matting, Skunk, etc." className="flex-1 p-2 border rounded text-sm" />
-                                <span className="text-gray-500">$</span>
-                                <input type="number" value={newChargePrice} onChange={(e) => setNewChargePrice(e.target.value)} placeholder="0" className="w-16 p-2 border rounded text-sm" />
-                                <button onClick={() => addCustomCharge(booking.id)} className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded text-sm">Add</button>
-                                <button onClick={() => { setAddingChargeToBooking(null); setNewChargeName(''); setNewChargePrice(''); }} className="px-2 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded text-sm">✕</button>
+                                <div className="flex gap-2 items-center">
+                                  <span className="text-gray-500">$</span>
+                                  <input type="number" value={newChargePrice} onChange={(e) => setNewChargePrice(e.target.value)} placeholder="0" className="w-20 p-2 border rounded text-sm" />
+                                  <button onClick={() => addCustomCharge(booking.id)} className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded text-sm">Add</button>
+                                  <button onClick={() => { setAddingChargeToBooking(null); setNewChargeName(''); setNewChargePrice(''); }} className="px-2 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded text-sm">✕</button>
+                                </div>
                               </div>
                             ) : (
                               <button onClick={() => setAddingChargeToBooking(booking.id)} className="text-orange-600 hover:text-orange-800 font-semibold text-sm">+ Add Extra Charge</button>
                             )}
                           </div>
                           
-                          <p className="text-gray-600 text-sm mt-2">Owner: {booking.customers?.name} • {booking.customers?.phone} • {booking.customers?.email}</p>
+                          <div className="text-gray-600 text-xs sm:text-sm mt-2">
+                            <span className="font-semibold">Owner:</span> {booking.customers?.name}
+                            <span className="hidden sm:inline"> • {booking.customers?.phone} • {booking.customers?.email}</span>
+                            <div className="sm:hidden text-xs mt-1">{booking.customers?.phone}</div>
+                          </div>
                           <div className="mt-3 p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
                             <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Groomer Notes (for {booking.dogs?.name})</p>
                             {editingGroomerNotes === booking.dogs?.id ? (
