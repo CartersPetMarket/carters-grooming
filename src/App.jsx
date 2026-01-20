@@ -240,6 +240,8 @@ export default function App() {
   const [petHistory, setPetHistory] = useState([]);
   const [editingPetNotes, setEditingPetNotes] = useState(false);
   const [petNotesText, setPetNotesText] = useState('');
+  const [editingGroomerNotes, setEditingGroomerNotes] = useState(null);
+  const [groomerNotesText, setGroomerNotesText] = useState('');
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportGroomer, setReportGroomer] = useState('all');
@@ -420,7 +422,7 @@ export default function App() {
   };
 
   const loadAllBookings = async () => {
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
     const { data: allVax } = await supabase.from('pet_vaccinations').select('*');
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
@@ -740,11 +742,14 @@ export default function App() {
       setCompletedBooking({
         petName: selectedDog.name,
         petBreed: selectedDog.breed,
+        petId: selectedDog.id,
         service: serviceName,
+        serviceId: selectedService,
         date: selectedDate,
         time: slot.time,
         groomer: slot.groomer,
-        addOns: selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean)
+        addOns: selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean),
+        addOnIds: [...selectedAddOns]
       });
       
       setShowBookingConfirmation(false);
@@ -754,6 +759,60 @@ export default function App() {
       await loadUserData(user.id);
       setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes('');
     } catch (error) { alert(error.message); }
+  };
+
+  const handleCancelBooking = async (booking) => {
+    // Check if appointment is more than 24 hours away
+    const appointmentDateTime = new Date(booking.appointment_date + 'T' + convertTo24Hour(booking.appointment_time));
+    const now = new Date();
+    const hoursUntil = (appointmentDateTime - now) / (1000 * 60 * 60);
+    
+    if (hoursUntil < 24) {
+      // Less than 24 hours - must call
+      setShowCallPopup(true);
+      return;
+    }
+    
+    // More than 24 hours - can cancel online
+    const confirmed = window.confirm(`Cancel your appointment for ${booking.dogs?.name} on ${new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at ${booking.appointment_time}?\n\nThis cannot be undone.`);
+    if (!confirmed) return;
+    
+    try {
+      const { error } = await supabase.from('bookings').update({ status: 'canceled' }).eq('id', booking.id);
+      if (error) throw error;
+      await loadUserData(user.id);
+      alert('Appointment canceled successfully.');
+    } catch (error) {
+      alert('Error canceling appointment: ' + error.message);
+    }
+  };
+
+  const convertTo24Hour = (time12h) => {
+    const [time, modifier] = time12h.split(' ');
+    let [hours, minutes] = time.split(':');
+    if (hours === '12') hours = '00';
+    if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+    return `${String(hours).padStart(2, '0')}:${minutes || '00'}:00`;
+  };
+
+  const bookAgainInWeeks = (weeks) => {
+    if (!completedBooking) return;
+    
+    // Find the dog
+    const dog = dogs.find(d => d.id === completedBooking.petId);
+    if (dog) {
+      setSelectedDog(dog);
+      setSelectedService(completedBooking.serviceId);
+      setSelectedAddOns(completedBooking.addOnIds || []);
+      
+      // Calculate date X weeks from original booking
+      const futureDate = new Date(completedBooking.date);
+      futureDate.setDate(futureDate.getDate() + (weeks * 7));
+      setSelectedDate(futureDate.toISOString().split('T')[0]);
+    }
+    
+    setShowBookingSuccess(false);
+    setCompletedBooking(null);
   };
 
   const showConfirmation = (slot) => {
@@ -1178,8 +1237,17 @@ export default function App() {
               <Phone className="text-blue-600 flex-shrink-0 mt-1" size={20} />
               <div>
                 <p className="font-bold text-blue-900">Need to make changes?</p>
-                <p className="text-sm text-blue-700">Call us at <a href="tel:+17132537718" className="font-bold underline">(713) 253-7718</a> to reschedule or cancel.</p>
+                <p className="text-sm text-blue-700">You can cancel online (24+ hrs notice) or call us at <a href="tel:+17132537718" className="font-bold underline">(713) 253-7718</a>.</p>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200 mb-6">
+            <p className="font-bold text-purple-900 mb-3">📅 Book {completedBooking.petName}'s next groom?</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => bookAgainInWeeks(4)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">4 weeks</button>
+              <button onClick={() => bookAgainInWeeks(6)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">6 weeks</button>
+              <button onClick={() => bookAgainInWeeks(8)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">8 weeks</button>
             </div>
           </div>
           
@@ -1189,12 +1257,6 @@ export default function App() {
               className="w-full py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-black text-lg rounded-xl transition shadow-lg"
             >
               Done
-            </button>
-            <button 
-              onClick={() => { setShowBookingSuccess(false); setCompletedBooking(null); }}
-              className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition"
-            >
-              Book Another Appointment
             </button>
           </div>
         </div>
@@ -1551,6 +1613,13 @@ export default function App() {
       setSelectedPet({ ...selectedPet, notes: petNotesText });
     };
 
+    const saveGroomerNotesFromCard = async (dogId) => {
+      await supabase.from('dogs').update({ notes: groomerNotesText }).eq('id', dogId);
+      await loadAllBookings();
+      setEditingGroomerNotes(null);
+      setGroomerNotesText('');
+    };
+
     const loadPetHistory = async (dogId) => {
       const { data } = await supabase.from('bookings').select('*, groomers(name), services(name)').eq('dog_id', dogId).order('appointment_date', { ascending: false });
       setPetHistory(data || []);
@@ -1711,6 +1780,27 @@ export default function App() {
                             })()}
                           </p>
                           <p className="text-gray-600 text-sm mt-2">Owner: {booking.customers?.name} • {booking.customers?.phone} • {booking.customers?.email}</p>
+                          <div className="mt-3 p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
+                            <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Groomer Notes (for {booking.dogs?.name})</p>
+                            {editingGroomerNotes === booking.dogs?.id ? (
+                              <div className="space-y-2">
+                                <textarea value={groomerNotesText} onChange={(e) => setGroomerNotesText(e.target.value)} placeholder="e.g., Sensitive ears, use #4 blade, prefers treats, needs breaks..." className="w-full p-2 border-2 border-gray-300 rounded-lg text-sm" rows={3} />
+                                <div className="flex gap-2">
+                                  <button onClick={() => saveGroomerNotesFromCard(booking.dogs?.id)} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-sm">Save</button>
+                                  <button onClick={() => { setEditingGroomerNotes(null); setGroomerNotesText(''); }} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-sm">Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                {booking.dogs?.notes ? (
+                                  <p className="text-gray-700 text-sm mb-2">{booking.dogs.notes}</p>
+                                ) : (
+                                  <p className="text-gray-400 text-sm italic mb-2">No groomer notes yet</p>
+                                )}
+                                <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(booking.dogs?.notes || ''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">✏️ {booking.dogs?.notes ? 'Edit' : 'Add Notes'}</button>
+                              </div>
+                            )}
+                          </div>
                           {booking.notes && <p className="text-gray-500 text-sm mt-2 bg-yellow-50 p-2 rounded-lg">📝 {booking.notes}</p>}
                           
                           <div className="mt-3">
@@ -3505,9 +3595,9 @@ export default function App() {
               {selectedDate && selectedDog && selectedService && (<div><h3 className="font-bold text-lg text-gray-900 mb-4">Available Appointments</h3>{availableSlots.length === 0 ? (<div><div className="text-center py-8 sm:py-12 bg-gray-50 rounded-2xl mb-4"><Calendar className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-600 font-semibold mb-2">No appointments available</p><p className="text-gray-500 text-sm">Please try a different date</p></div><button onClick={() => setShowCallPopup(true)} className="w-full p-4 sm:p-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl font-bold text-base sm:text-lg transition shadow-lg flex items-center justify-center gap-3"><Phone size={24} />Can't Find a Time? Call Us!</button></div>) : (<><div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">{availableSlots.map((slot, idx) => (<button key={idx} onClick={() => showConfirmation(slot)} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 border-gray-200 hover:border-red-500 bg-white hover:bg-gradient-to-br hover:from-red-50 hover:to-orange-50 transition-all text-left shadow-md hover:shadow-xl"><div className="flex items-center justify-between mb-2 sm:mb-3"><span className="text-xl sm:text-2xl font-black text-gray-900">{slot.time}</span></div><div className="text-xs sm:text-sm text-gray-600 font-semibold">with {slot.groomer}</div></button>))}</div><button onClick={() => setShowCallPopup(true)} className="w-full p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold transition border-2 border-blue-200 flex items-center justify-center gap-2 text-sm sm:text-base"><Phone size={20} />Don't see a time that works? Call us!</button></>)}</div>)}
             </div>
 
-            {bookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Your Upcoming Appointments</h2><div className="space-y-3 sm:space-y-4">{bookings.map(booking => (<div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md"><div className="flex items-start justify-between gap-3"><div className="flex-1"><h3 className="font-black text-base sm:text-lg text-gray-900">{booking.dogs?.name}</h3><p className="text-gray-700 font-semibold mt-2 text-sm sm:text-base">📅 {new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p><p className="text-gray-700 font-semibold text-sm sm:text-base">🕐 {booking.appointment_time}</p><p className="text-gray-600 text-xs sm:text-sm mt-2">with {booking.groomers?.name} • {booking.services?.name}</p>{booking.notes && (<p className="text-gray-500 text-xs sm:text-sm mt-2 bg-white/50 p-2 rounded">📝 {booking.notes}</p>)}</div><div className="px-2 sm:px-4 py-1 sm:py-2 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full whitespace-nowrap">{booking.status}</div></div></div>))}</div></div>)}
+            {bookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Your Upcoming Appointments</h2><div className="space-y-3 sm:space-y-4">{bookings.filter(b => b.status === 'scheduled' || b.status === 'in_progress').map(booking => (<div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md"><div className="flex items-start justify-between gap-3"><div className="flex-1"><h3 className="font-black text-base sm:text-lg text-gray-900">{booking.dogs?.name}</h3><p className="text-gray-700 font-semibold mt-2 text-sm sm:text-base">📅 {new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p><p className="text-gray-700 font-semibold text-sm sm:text-base">🕐 {booking.appointment_time}</p><p className="text-gray-600 text-xs sm:text-sm mt-2">with {booking.groomers?.name} • {booking.services?.name}</p>{booking.notes && (<p className="text-gray-500 text-xs sm:text-sm mt-2 bg-white/50 p-2 rounded">📝 {booking.notes}</p>)}</div><div className="flex flex-col items-end gap-2"><div className="px-2 sm:px-4 py-1 sm:py-2 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full whitespace-nowrap">{booking.status === 'in_progress' ? 'In Progress' : 'Scheduled'}</div>{booking.status === 'scheduled' && <button onClick={() => handleCancelBooking(booking)} className="text-xs text-red-500 hover:text-red-700 font-semibold">Cancel</button>}</div></div></div>))}</div></div>)}
 
-            {pastBookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Past Appointments</h2><div className="space-y-3 sm:space-y-4">{pastBookings.map(booking => (<div key={booking.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200"><div className="flex items-center justify-between gap-3"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-gray-900">{booking.dogs?.name}</h3><span className="text-gray-400">•</span><span className="text-sm text-gray-600">{booking.services?.name}</span></div><p className="text-sm text-gray-500 mt-1">{new Date(booking.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} with <span className="font-semibold text-gray-700">{booking.groomers?.name}</span></p></div><div className="flex-shrink-0"><span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">Completed</span></div></div></div>))}</div><p className="text-xs text-gray-400 mt-4 text-center">Showing last 10 completed appointments</p></div>)}
+            {pastBookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Past Appointments</h2><div className="space-y-3 sm:space-y-4">{pastBookings.map(booking => (<div key={booking.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200"><div className="flex items-center justify-between gap-3"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-gray-900">{booking.dogs?.name}</h3><span className="text-gray-400">•</span><span className="text-sm text-gray-600">{booking.services?.name}</span></div><p className="text-sm text-gray-500 mt-1">{new Date(booking.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} with <span className="font-semibold text-gray-700">{booking.groomers?.name}</span></p></div><div className="flex-shrink-0 flex flex-col items-end gap-1"><span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">Completed</span><button onClick={() => { const dog = dogs.find(d => d.id === booking.dog_id); if (dog) { setSelectedDog(dog); setSelectedService(booking.service_id); }}} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Book again</button></div></div></div>))}</div><p className="text-xs text-gray-400 mt-4 text-center">Showing last 10 completed appointments</p></div>)}
           </div>
         </div>
       </div>
