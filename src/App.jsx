@@ -1673,23 +1673,23 @@ export default function App() {
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
         <BookingPinModal />
         <div className="bg-gradient-to-r from-red-600 to-red-700 shadow-xl">
-          <div className="max-w-7xl mx-auto px-4 py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <img src="/logo.png" alt="Carter's Pet Market" className="h-14 w-auto bg-white rounded-xl p-1" />
+          <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <img src="/logo.png" alt="Carter's Pet Market" className="h-10 sm:h-14 w-auto bg-white rounded-xl p-1" />
                 <div>
-                  <h1 className="text-3xl font-black text-white">Admin Dashboard</h1>
+                  <h1 className="text-xl sm:text-3xl font-black text-white">Admin Dashboard</h1>
                   {currentStaff && (
-                    <p className="text-red-100 text-sm font-medium">
+                    <p className="text-red-100 text-xs sm:text-sm font-medium">
                       👤 Logged in as: <span className="font-bold text-white">{currentStaff.name}</span>
                       <span className="ml-2 px-2 py-0.5 bg-white/20 rounded text-xs">{currentStaff.role === 'admin' ? 'Admin' : 'Front Desk'}</span>
                     </p>
                   )}
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setView('booking')} className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold">Back to Booking</button>
-                <button onClick={staffLogout} className="flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold"><LogOut size={20} />Staff Logout</button>
+              <div className="flex gap-2 sm:gap-3">
+                <button onClick={() => setView('booking')} className="flex-1 sm:flex-none px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold text-sm sm:text-base">Back to Booking</button>
+                <button onClick={staffLogout} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold text-sm sm:text-base"><LogOut size={18} /><span className="hidden sm:inline">Staff Logout</span><span className="sm:hidden">Logout</span></button>
               </div>
             </div>
           </div>
