@@ -404,6 +404,14 @@ export default function App() {
     setAllServices(servicesData || []);
     const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
     setBookings(bookingsData || []);
+    // Load ALL bookings for capacity checking (minimal fields, non-canceled only)
+    const { data: capacityBookings } = await supabase
+      .from('bookings')
+      .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
+      .gte('appointment_date', today)
+      .lte('appointment_date', twoMonthsOut)
+      .not('status', 'in', '("canceled","no_show")');
+    setAllBookings(capacityBookings || []);
     // Load past completed bookings
     const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
     setPastBookings(pastData || []);
@@ -1424,9 +1432,14 @@ export default function App() {
         { petName: booking?.dogs?.name, customerName: booking?.customers?.name, date: booking?.appointment_date, time: booking?.appointment_time }
       );
       
-      await supabase.from('dogs').update({ 
-        no_show_count: supabase.rpc('increment_no_show', { dog_id: bookingId }) 
-      });
+      // Increment no-show count on the dog (fixed: was using broken RPC syntax)
+      const dogId = booking?.dogs?.id || booking?.dog_id;
+      if (dogId) {
+        const { data: dog } = await supabase.from('dogs').select('no_show_count').eq('id', dogId).single();
+        await supabase.from('dogs').update({ 
+          no_show_count: (dog?.no_show_count || 0) + 1 
+        }).eq('id', dogId);
+      }
       await loadAllBookings();
     } catch (error) {
       alert('Error: ' + error.message);
