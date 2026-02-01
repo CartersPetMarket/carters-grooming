@@ -1181,7 +1181,7 @@ export default function App() {
                 <span className="font-semibold text-gray-900">Text me updates about this appointment</span>
                 <p className="text-xs text-gray-500 mt-1">
                   Receive confirmation & pickup notifications. Msg & data rates may apply. Reply STOP to unsubscribe. 
-                  <a href="https://carterspetmarket.com/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">Privacy Policy</a>
+                  <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">Privacy Policy</a>
                 </p>
               </div>
             </label>
