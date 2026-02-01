@@ -324,6 +324,7 @@ export default function App() {
   // Booking confirmation
   const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
   const [confirmationSlot, setConfirmationSlot] = useState(null);
+  const [smsConsent, setSmsConsent] = useState(true); // SMS opt-in checkbox
 
   // Booking success
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
@@ -736,18 +737,20 @@ export default function App() {
       const vaxNotes = `Rabies: ${vax.rabiesMethod === 'upload' ? 'Uploaded' : 'Bringing physical copy'}`;
       const addOnNotes = selectedAddOns.length > 0 ? 'Add-ons: ' + selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' : '';
       const specialNotes = hasSpecialNeeds && bookingNotes ? '⚠️ SPECIAL NEEDS: ' + bookingNotes + ' | ' : '';
-      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: specialNotes + addOnNotes + vaxNotes }]);
+      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent }]);
       if (error) throw error;
       
-      // Send confirmation notification
-      const { data: customerData } = await supabase.from('customers').select('phone').eq('id', user.id).single();
-      if (customerData?.phone) {
-        sendNotification('confirmation', {
-          dogName: selectedDog.name,
-          date: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-          time: slot.time,
-          groomer: slot.groomer
-        }, customerData.phone);
+      // Send confirmation notification ONLY if customer opted in
+      if (smsConsent) {
+        const { data: customerData } = await supabase.from('customers').select('phone').eq('id', user.id).single();
+        if (customerData?.phone) {
+          sendNotification('confirmation', {
+            dogName: selectedDog.name,
+            date: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+            time: slot.time,
+            groomer: slot.groomer
+          }, customerData.phone);
+        }
       }
       
       // Store completed booking details for success screen
@@ -770,7 +773,7 @@ export default function App() {
       setShowBookingSuccess(true);
       
       await loadUserData(user.id);
-      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes('');
+      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(true);
     } catch (error) { alert(error.message); }
   };
 
@@ -1165,6 +1168,25 @@ export default function App() {
           
           <p className="text-xs text-gray-400 italic text-center mb-4">*Price is an estimate. Final price may vary based on coat condition.</p>
           
+          {/* SMS Consent Checkbox - Required for Twilio A2P compliance */}
+          <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={smsConsent} 
+                onChange={(e) => setSmsConsent(e.target.checked)}
+                className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+              />
+              <div>
+                <span className="font-semibold text-gray-900">Text me updates about this appointment</span>
+                <p className="text-xs text-gray-500 mt-1">
+                  Receive confirmation & pickup notifications. Msg & data rates may apply. Reply STOP to unsubscribe. 
+                  <a href="https://carterspetmarket.com/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">Privacy Policy</a>
+                </p>
+              </div>
+            </label>
+          </div>
+          
           <div className="space-y-3">
             <button 
               onClick={() => handleBooking(confirmationSlot)}
@@ -1401,8 +1423,8 @@ export default function App() {
         { petName: booking?.dogs?.name, customerName: booking?.customers?.name, oldStatus, newStatus, date: booking?.appointment_date }
       );
       
-      // Send completion notification
-      if (newStatus === 'completed' && booking) {
+      // Send completion notification (only if customer opted in)
+      if (newStatus === 'completed' && booking && booking.sms_consent !== false) {
         await sendNotification('completion', {
           dogName: booking.dogs?.name,
           date: booking.appointment_date,
