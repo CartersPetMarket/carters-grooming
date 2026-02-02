@@ -246,6 +246,7 @@ export default function App() {
   const [groomerFilter, setGroomerFilter] = useState('all');
   const [allCustomers, setAllCustomers] = useState([]);
   const [allPets, setAllPets] = useState([]);
+  const [allWalkIns, setAllWalkIns] = useState([]); // Walk-in sales for display
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedPet, setSelectedPet] = useState(null);
@@ -536,6 +537,11 @@ export default function App() {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activityData } = await supabase.from('activity_log').select('*').gte('created_at', weekAgo).order('created_at', { ascending: false }).limit(200);
     setActivityLog(activityData || []);
+
+    // Load walk-in sales (last 30 days for reports)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: walkInsData } = await supabase.from('walk_in_sales').select('*').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false });
+    setAllWalkIns(walkInsData || []);
   };
 
   // Staff PIN functions
@@ -1984,6 +1990,11 @@ export default function App() {
                         console.log('Walk-in sale recorded (table may not exist):', { serviceNames, total, groomer: selectedGroomer?.name });
                       }
                       
+                      // Reload walk-ins to show the new one
+                      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                      const { data: walkInsData } = await supabase.from('walk_in_sales').select('*').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false });
+                      setAllWalkIns(walkInsData || []);
+                      
                       alert(`✅ Walk-in sale recorded!\n\nGroomer: ${selectedGroomer?.name}\nServices: ${serviceNames}\nTotal: $${total.toFixed(2)}`);
                       
                       // Reset all state and close modal
@@ -2225,6 +2236,42 @@ export default function App() {
                   ))}
                 </div>
               )}
+              
+              {/* Today's Walk-In Sales */}
+              {(() => {
+                const today = new Date().toISOString().split('T')[0];
+                const todaysWalkIns = allWalkIns.filter(w => w.created_at?.split('T')[0] === today);
+                if (todaysWalkIns.length === 0) return null;
+                
+                return (
+                  <div className="mt-8">
+                    <h3 className="text-2xl font-black text-gray-900 mb-4">💵 Today's Walk-In Sales ({todaysWalkIns.length})</h3>
+                    <div className="grid gap-3">
+                      {todaysWalkIns.map(walkIn => (
+                        <div key={walkIn.id} className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 border-dashed">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">WALK-IN</span>
+                                <span className="font-bold text-gray-900">{walkIn.pet_name || 'Pet'}</span>
+                                {walkIn.customer_name && walkIn.customer_name !== 'Walk-in' && (
+                                  <span className="text-gray-500">({walkIn.customer_name})</span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">{walkIn.service_names}</p>
+                              <p className="text-sm text-gray-500">
+                                {new Date(walkIn.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                {walkIn.groomer_name && <span className="ml-2">• {walkIn.groomer_name}</span>}
+                              </p>
+                            </div>
+                            <span className="text-2xl font-black text-green-600">${walkIn.total_price}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -3110,10 +3157,13 @@ export default function App() {
                 <div className="flex items-end">
                   <button 
                     onClick={async () => {
+                      // Load bookings
                       let query = supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').gte('appointment_date', reportStartDate).lte('appointment_date', reportEndDate).order('appointment_date', { ascending: true });
                       const { data } = await query;
                       const filtered = reportGroomer === 'all' ? data : data?.filter(b => b.groomers?.name === reportGroomer);
                       setReportData(filtered || []);
+                      
+                      // Walk-ins are already loaded in allWalkIns, filter them for the report
                     }}
                     className="w-full p-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition"
                   >
@@ -3121,6 +3171,45 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              {/* Walk-Ins Summary for Report Period */}
+              {(() => {
+                const filteredWalkIns = allWalkIns.filter(w => {
+                  const walkInDate = w.created_at?.split('T')[0];
+                  const matchesDate = walkInDate >= reportStartDate && walkInDate <= reportEndDate;
+                  const matchesGroomer = reportGroomer === 'all' || w.groomer_name === reportGroomer;
+                  return matchesDate && matchesGroomer;
+                });
+                
+                if (filteredWalkIns.length === 0) return null;
+                
+                const walkInsTotal = filteredWalkIns.reduce((sum, w) => sum + (w.total_price || 0), 0);
+                
+                return (
+                  <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border-2 border-green-300">
+                    <h3 className="font-bold text-green-800 mb-3">💵 Walk-In Sales ({filteredWalkIns.length})</h3>
+                    <div className="space-y-2 mb-4">
+                      {filteredWalkIns.map(w => (
+                        <div key={w.id} className="flex items-center justify-between bg-white p-2 rounded-lg">
+                          <div>
+                            <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded mr-2">WALK-IN</span>
+                            <span className="font-semibold">{w.pet_name || 'Pet'}</span>
+                            <span className="text-gray-500 text-sm ml-2">{w.service_names}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-green-600">${w.total_price}</span>
+                            <span className="text-gray-500 text-sm ml-2">{w.groomer_name}</span>
+                            <span className="text-gray-400 text-xs ml-2">{new Date(w.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-right font-bold text-green-700">
+                      Walk-Ins Total: ${walkInsTotal.toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {reportData.length > 0 && (
                 <>
@@ -3197,8 +3286,8 @@ export default function App() {
                         <p className="text-sm text-gray-500">{reportStartDate} to {reportEndDate} {reportGroomer !== 'all' && `• ${reportGroomer}`}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-gray-600">Total Revenue</p>
-                        <p className="text-3xl font-black text-green-700">
+                        <p className="text-sm text-gray-600">Appointments Revenue</p>
+                        <p className="text-2xl font-black text-green-700">
                           ${reportData.reduce((sum, b) => {
                             const breedInfo = BREED_DATABASE[b.dogs?.breed];
                             const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
@@ -3208,6 +3297,42 @@ export default function App() {
                         </p>
                       </div>
                     </div>
+                    
+                    {/* Grand Total with Walk-Ins */}
+                    {(() => {
+                      const appointmentsTotal = reportData.reduce((sum, b) => {
+                        const breedInfo = BREED_DATABASE[b.dogs?.breed];
+                        const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
+                        const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
+                        return sum + (b.actual_price !== null ? b.actual_price : basePriceNum);
+                      }, 0);
+                      
+                      const filteredWalkIns = allWalkIns.filter(w => {
+                        const walkInDate = w.created_at?.split('T')[0];
+                        const matchesDate = walkInDate >= reportStartDate && walkInDate <= reportEndDate;
+                        const matchesGroomer = reportGroomer === 'all' || w.groomer_name === reportGroomer;
+                        return matchesDate && matchesGroomer;
+                      });
+                      const walkInsTotal = filteredWalkIns.reduce((sum, w) => sum + (w.total_price || 0), 0);
+                      
+                      if (walkInsTotal === 0) return null;
+                      
+                      return (
+                        <div className="mt-4 pt-4 border-t-2 border-green-300">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-gray-600 font-semibold">+ {filteredWalkIns.length} walk-ins</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-gray-600">Grand Total</p>
+                              <p className="text-3xl font-black text-green-700">
+                                ${(appointmentsTotal + walkInsTotal).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </>
               )}
