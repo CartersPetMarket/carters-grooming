@@ -592,7 +592,10 @@ export default function App() {
       if (authError) throw authError;
       const { error: customerError } = await supabase.from('customers').insert([{ id: authData.user.id, email, name, phone, password_hash: 'handled_by_auth' }]);
       if (customerError) throw customerError;
-      alert('Account created! Please check your email to verify.');
+      // Auto-login after signup (no email verification required)
+      setUser(authData.user);
+      await loadUserData(authData.user.id);
+      setView('booking');
     } catch (error) { alert(error.message); }
   };
 
