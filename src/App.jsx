@@ -2278,6 +2278,8 @@ export default function App() {
                             const basePrice = booking.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                             const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
                             const displayPrice = booking.actual_price !== null ? booking.actual_price : basePriceNum;
+                            const addOnsTotal = booking.add_ons_total || 0;
+                            const totalWithAddOns = displayPrice + addOnsTotal;
                             return editingBookingPrice === booking.id ? (
                                 <span className="inline-flex items-center gap-1 ml-1">
                                   $<input type="number" value={bookingPriceValue} onChange={(e) => setBookingPriceValue(e.target.value)} className="w-20 p-1 border rounded" />
@@ -2290,11 +2292,22 @@ export default function App() {
                                 </span>
                               ) : (
                                 <button onClick={() => { setEditingBookingPrice(booking.id); setBookingPriceValue(displayPrice.toString()); }} className="font-semibold text-green-700 hover:underline">
-                                  ${displayPrice}{booking.actual_price !== null && <span className="text-xs ml-1">✓</span>}
+                                  ${displayPrice}{addOnsTotal > 0 && <span className="text-orange-600"> + ${addOnsTotal} add-ons</span>}{booking.actual_price !== null && <span className="text-xs ml-1">✓</span>}
                                 </button>
                               );
                             })()}
                           </p>
+                          
+                          {/* Display Add-Ons */}
+                          {booking.add_on_names && booking.add_on_names.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {booking.add_on_names.map((name, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-semibold rounded-full">
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           
                           {/* Custom Charges / Add-ons - hidden on mobile unless has charges */}
                           <div className={`mt-2 p-2 sm:p-3 bg-orange-50 rounded-xl border-2 border-orange-200 ${(booking.extra_charges || []).length === 0 ? 'hidden sm:block' : ''}`}>
