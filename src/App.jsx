@@ -349,6 +349,7 @@ export default function App() {
   const [walkInPetName, setWalkInPetName] = useState('');
   const [walkInNotes, setWalkInNotes] = useState('');
   const [walkInPriceOverrides, setWalkInPriceOverrides] = useState({}); // { service_id: custom_price }
+  const [walkInGroomer, setWalkInGroomer] = useState(''); // groomer id
 
   // Edit Booking Services
   const [showEditServicesModal, setShowEditServicesModal] = useState(false);
@@ -1817,7 +1818,7 @@ export default function App() {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-black text-gray-900">💵 Walk-In Sale</h2>
-                  <button onClick={() => { setShowWalkInModal(false); setWalkInServices([]); setWalkInCustomerName(''); setWalkInPetName(''); setWalkInNotes(''); setWalkInPriceOverrides({}); }} className="text-gray-400 hover:text-gray-600">✕</button>
+                  <button onClick={() => { setShowWalkInModal(false); setWalkInServices([]); setWalkInCustomerName(''); setWalkInPetName(''); setWalkInNotes(''); setWalkInPriceOverrides({}); setWalkInGroomer(''); }} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
                 </div>
                 
                 <div className="space-y-4">
@@ -1842,6 +1843,21 @@ export default function App() {
                         className="w-full p-3 border-2 border-gray-300 rounded-xl"
                       />
                     </div>
+                  </div>
+                  
+                  {/* Groomer Selection */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Groomer <span className="text-red-500">*</span></label>
+                    <select
+                      value={walkInGroomer}
+                      onChange={(e) => setWalkInGroomer(e.target.value)}
+                      className="w-full p-3 border-2 border-gray-300 rounded-xl"
+                    >
+                      <option value="">Select groomer...</option>
+                      {groomers.filter(g => g.active !== false).map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
                   </div>
                   
                   <div>
@@ -1937,6 +1953,11 @@ export default function App() {
                         alert('Please select at least one service');
                         return;
                       }
+                      if (!walkInGroomer) {
+                        alert('Please select a groomer');
+                        return;
+                      }
+                      const selectedGroomer = groomers.find(g => g.id === walkInGroomer);
                       const total = walkInServices.reduce((t, id) => {
                         const service = WALK_IN_SERVICES.find(s => s.id === id);
                         const price = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
@@ -1953,25 +1974,30 @@ export default function App() {
                         total_price: total,
                         notes: walkInNotes || null,
                         staff_name: currentStaff?.name || 'Staff',
+                        groomer_id: walkInGroomer,
+                        groomer_name: selectedGroomer?.name || 'Unknown',
                         created_at: new Date().toISOString()
                       });
                       
                       if (error) {
                         // Table might not exist, just show success anyway
-                        console.log('Walk-in sale recorded (table may not exist):', { serviceNames, total });
+                        console.log('Walk-in sale recorded (table may not exist):', { serviceNames, total, groomer: selectedGroomer?.name });
                       }
                       
-                      alert(`✅ Walk-in sale recorded!\n\nServices: ${serviceNames}\nTotal: $${total.toFixed(2)}`);
-                      setShowWalkInModal(false);
+                      alert(`✅ Walk-in sale recorded!\n\nGroomer: ${selectedGroomer?.name}\nServices: ${serviceNames}\nTotal: $${total.toFixed(2)}`);
+                      
+                      // Reset all state and close modal
                       setWalkInServices([]);
                       setWalkInCustomerName('');
                       setWalkInPetName('');
                       setWalkInNotes('');
                       setWalkInPriceOverrides({});
+                      setWalkInGroomer('');
+                      setShowWalkInModal(false);
                     }}
-                    disabled={walkInServices.length === 0}
+                    disabled={walkInServices.length === 0 || !walkInGroomer}
                     className={`w-full py-4 rounded-xl font-bold text-lg transition ${
-                      walkInServices.length > 0
+                      walkInServices.length > 0 && walkInGroomer
                         ? 'bg-green-600 hover:bg-green-700 text-white'
                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     }`}
@@ -2342,6 +2368,33 @@ export default function App() {
                               <button onClick={() => setAddingChargeToBooking(booking.id)} className="text-orange-600 hover:text-orange-800 font-semibold text-sm">+ Add Extra Charge</button>
                             )}
                           </div>
+                          
+                          {/* Checkout Total */}
+                          {(() => {
+                            const breedInfo = BREED_DATABASE[booking.dogs?.breed];
+                            const basePrice = booking.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
+                            const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
+                            const displayPrice = booking.actual_price !== null ? booking.actual_price : basePriceNum;
+                            const addOnsTotal = booking.add_ons_total || 0;
+                            const extraChargesTotal = (booking.extra_charges || []).reduce((sum, c) => sum + c.price, 0);
+                            const grandTotal = displayPrice + addOnsTotal + extraChargesTotal;
+                            
+                            return (
+                              <div className="mt-3 p-3 bg-green-100 rounded-xl border-2 border-green-300">
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <p className="text-xs font-bold text-green-700 uppercase">💵 Checkout Total</p>
+                                    <p className="text-xs text-green-600 mt-1">
+                                      ${displayPrice} base
+                                      {addOnsTotal > 0 && ` + $${addOnsTotal} add-ons`}
+                                      {extraChargesTotal > 0 && ` + $${extraChargesTotal} extra`}
+                                    </p>
+                                  </div>
+                                  <span className="text-2xl font-black text-green-700">${grandTotal}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                           
                           <div className="text-gray-600 text-xs sm:text-sm mt-2">
                             <span className="font-semibold">Owner:</span> {booking.customers?.name}
