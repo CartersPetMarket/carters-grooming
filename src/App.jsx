@@ -361,19 +361,13 @@ export default function App() {
       if (event === 'SIGNED_IN' && session) {
         setUser(session.user);
         
-        // Check if customer record exists (for Google OAuth users who are new)
-        const { data: existingCustomer } = await supabase.from('customers').select('id').eq('id', session.user.id).single();
-        
-        if (!existingCustomer) {
-          // Create customer record for new Google OAuth user
-          await supabase.from('customers').insert([{
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
-            phone: session.user.user_metadata?.phone || '',
-            password_hash: 'oauth_user'
-          }]);
-        }
+        // Upsert customer record (handles both new and existing users safely)
+        await supabase.from('customers').upsert({
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
+          phone: session.user.user_metadata?.phone || ''
+        }, { onConflict: 'id', ignoreDuplicates: true });
         
         await loadUserData(session.user.id);
         setView('booking');
@@ -414,20 +408,13 @@ export default function App() {
       const user = data.session.user;
       setUser(user);
       
-      // Check if customer record exists (for Google OAuth users who are new)
-      const { data: existingCustomer } = await supabase.from('customers').select('id').eq('id', user.id).single();
-      
-      if (!existingCustomer) {
-        // Create customer record for new Google OAuth user
-        const { error: customerError } = await supabase.from('customers').insert([{
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-          phone: user.user_metadata?.phone || '',
-          password_hash: 'oauth_user'
-        }]);
-        if (customerError) console.error('Error creating customer:', customerError);
-      }
+      // Upsert customer record (handles both new and existing users safely)
+      await supabase.from('customers').upsert({
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
+        phone: user.user_metadata?.phone || ''
+      }, { onConflict: 'id', ignoreDuplicates: true });
       
       await loadUserData(user.id);
       setView('booking');
@@ -634,8 +621,21 @@ export default function App() {
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({ email, password, options: { data: { name, phone } } });
       if (authError) throw authError;
-      const { error: customerError } = await supabase.from('customers').insert([{ id: authData.user.id, email, name, phone, password_hash: 'handled_by_auth' }]);
-      if (customerError) throw customerError;
+      // Use upsert to handle edge cases where customer record might already exist
+      const { error: customerError } = await supabase.from('customers').upsert({ 
+        id: authData.user.id, 
+        email, 
+        name, 
+        phone, 
+        password_hash: 'handled_by_auth' 
+      }, { onConflict: 'id' });
+      if (customerError) {
+        // Check for duplicate phone number
+        if (customerError.code === '23505' && customerError.message.includes('phone')) {
+          throw new Error('This phone number is already registered. Please use a different number or log in to your existing account.');
+        }
+        throw customerError;
+      }
       // Auto-login after signup (no email verification required)
       setUser(authData.user);
       await loadUserData(authData.user.id);
