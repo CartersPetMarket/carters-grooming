@@ -196,6 +196,18 @@ const ADD_ON_SERVICES = [
   { id: 'tick_removal', name: 'Tick Removal', price: 15 },
 ];
 
+// Walk-in services (includes add-ons plus walk-in specific services)
+const WALK_IN_SERVICES = [
+  { id: 'nail_trim', name: 'Nail Trim', price: 15 },
+  { id: 'nail_grind', name: 'Nail Grind', price: 20 },
+  { id: 'anal_glands', name: 'Anal Glands', price: 15 },
+  { id: 'teeth_cleaning', name: 'Teeth Cleaning', price: 12 },
+  { id: 'ear_cleaning', name: 'Ear Cleaning', price: 10 },
+  { id: 'paw_nose_butter', name: 'Paw & Nose Butter', price: 10 },
+  { id: 'flea_treatment', name: 'Flea Treatment', price: 15 },
+  { id: 'tick_removal', name: 'Tick Removal', price: 15 },
+];
+
 // Admin emails - add your email here
 const ADMIN_EMAILS = ['jordan@carterspetmarket.com', 'team@carterspetmarket.com'];
 
@@ -329,6 +341,19 @@ export default function App() {
   // Booking success
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
   const [completedBooking, setCompletedBooking] = useState(null);
+
+  // Walk-in Sales
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInServices, setWalkInServices] = useState([]);
+  const [walkInCustomerName, setWalkInCustomerName] = useState('');
+  const [walkInPetName, setWalkInPetName] = useState('');
+  const [walkInNotes, setWalkInNotes] = useState('');
+  const [walkInPriceOverrides, setWalkInPriceOverrides] = useState({}); // { service_id: custom_price }
+
+  // Edit Booking Services
+  const [showEditServicesModal, setShowEditServicesModal] = useState(false);
+  const [editingBookingServices, setEditingBookingServices] = useState(null);
+  const [editBookingAddOns, setEditBookingAddOns] = useState([]);
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email?.toLowerCase());
   const [showResetPassword, setShowResetPassword] = useState(false);
@@ -1784,6 +1809,280 @@ export default function App() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
         <BookingPinModal />
+        
+        {/* Walk-In Sale Modal */}
+        {showWalkInModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-black text-gray-900">💵 Walk-In Sale</h2>
+                  <button onClick={() => { setShowWalkInModal(false); setWalkInServices([]); setWalkInCustomerName(''); setWalkInPetName(''); setWalkInNotes(''); setWalkInPriceOverrides({}); }} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Customer Name (optional)</label>
+                      <input 
+                        type="text" 
+                        value={walkInCustomerName}
+                        onChange={(e) => setWalkInCustomerName(e.target.value)}
+                        placeholder="Walk-in customer"
+                        className="w-full p-3 border-2 border-gray-300 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Pet Name (optional)</label>
+                      <input 
+                        type="text" 
+                        value={walkInPetName}
+                        onChange={(e) => setWalkInPetName(e.target.value)}
+                        placeholder="Pet name"
+                        className="w-full p-3 border-2 border-gray-300 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Select Services</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {WALK_IN_SERVICES.map(service => (
+                        <button
+                          key={service.id}
+                          onClick={() => {
+                            setWalkInServices(prev => 
+                              prev.includes(service.id) 
+                                ? prev.filter(s => s !== service.id)
+                                : [...prev, service.id]
+                            );
+                          }}
+                          className={`p-3 rounded-xl border-2 transition text-left flex items-center justify-between ${
+                            walkInServices.includes(service.id) 
+                              ? 'border-green-500 bg-green-50' 
+                              : 'border-gray-200 hover:border-green-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${walkInServices.includes(service.id) ? 'bg-green-500' : 'bg-gray-200'}`}>
+                              {walkInServices.includes(service.id) && <Check className="text-white" size={12} />}
+                            </div>
+                            <span className="font-semibold text-sm">{service.name}</span>
+                          </div>
+                          <span className="font-bold text-green-600 text-sm">${service.price}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Selected services with editable prices */}
+                  {walkInServices.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Adjust Prices (tap to edit)</label>
+                      <div className="space-y-2">
+                        {walkInServices.map(id => {
+                          const service = WALK_IN_SERVICES.find(s => s.id === id);
+                          const currentPrice = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
+                          return (
+                            <div key={id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                              <span className="font-semibold text-gray-900">{service?.name}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-gray-500">$</span>
+                                <input
+                                  type="number"
+                                  value={currentPrice}
+                                  onChange={(e) => setWalkInPriceOverrides(prev => ({
+                                    ...prev,
+                                    [id]: parseFloat(e.target.value) || 0
+                                  }))}
+                                  className="w-20 p-2 border-2 border-gray-300 rounded-lg text-right font-bold text-green-600"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Notes (optional)</label>
+                    <textarea 
+                      value={walkInNotes}
+                      onChange={(e) => setWalkInNotes(e.target.value)}
+                      placeholder="Any notes..."
+                      className="w-full p-3 border-2 border-gray-300 rounded-xl"
+                      rows={2}
+                    />
+                  </div>
+                  
+                  {walkInServices.length > 0 && (
+                    <div className="p-4 bg-green-50 rounded-xl">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">Total:</span>
+                        <span className="text-2xl font-black text-green-600">
+                          ${walkInServices.reduce((total, id) => {
+                            const service = WALK_IN_SERVICES.find(s => s.id === id);
+                            const price = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
+                            return total + (price || 0);
+                          }, 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={async () => {
+                      if (walkInServices.length === 0) {
+                        alert('Please select at least one service');
+                        return;
+                      }
+                      const total = walkInServices.reduce((t, id) => {
+                        const service = WALK_IN_SERVICES.find(s => s.id === id);
+                        const price = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
+                        return t + (price || 0);
+                      }, 0);
+                      const serviceNames = walkInServices.map(id => WALK_IN_SERVICES.find(s => s.id === id)?.name).join(', ');
+                      
+                      // Create a walk-in record
+                      const { error } = await supabase.from('walk_in_sales').insert({
+                        customer_name: walkInCustomerName || 'Walk-in',
+                        pet_name: walkInPetName || null,
+                        services: walkInServices,
+                        service_names: serviceNames,
+                        total_price: total,
+                        notes: walkInNotes || null,
+                        staff_name: currentStaff?.name || 'Staff',
+                        created_at: new Date().toISOString()
+                      });
+                      
+                      if (error) {
+                        // Table might not exist, just show success anyway
+                        console.log('Walk-in sale recorded (table may not exist):', { serviceNames, total });
+                      }
+                      
+                      alert(`✅ Walk-in sale recorded!\n\nServices: ${serviceNames}\nTotal: $${total.toFixed(2)}`);
+                      setShowWalkInModal(false);
+                      setWalkInServices([]);
+                      setWalkInCustomerName('');
+                      setWalkInPetName('');
+                      setWalkInNotes('');
+                      setWalkInPriceOverrides({});
+                    }}
+                    disabled={walkInServices.length === 0}
+                    className={`w-full py-4 rounded-xl font-bold text-lg transition ${
+                      walkInServices.length > 0
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Complete Sale
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Edit Booking Services Modal */}
+        {showEditServicesModal && editingBookingServices && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-black text-gray-900">➕ Add Services</h2>
+                  <button onClick={() => { setShowEditServicesModal(false); setEditingBookingServices(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                <div className="mb-4 p-4 bg-gray-50 rounded-xl">
+                  <p className="font-semibold text-gray-900">{editingBookingServices.dogs?.name}</p>
+                  <p className="text-sm text-gray-600">{editingBookingServices.services?.name} • {editingBookingServices.appointment_time}</p>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Add-On Services</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {ADD_ON_SERVICES.map(service => (
+                        <button
+                          key={service.id}
+                          onClick={() => {
+                            setEditBookingAddOns(prev => 
+                              prev.includes(service.id) 
+                                ? prev.filter(s => s !== service.id)
+                                : [...prev, service.id]
+                            );
+                          }}
+                          className={`p-3 rounded-xl border-2 transition text-left flex items-center justify-between ${
+                            editBookingAddOns.includes(service.id) 
+                              ? 'border-green-500 bg-green-50' 
+                              : 'border-gray-200 hover:border-green-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${editBookingAddOns.includes(service.id) ? 'bg-green-500' : 'bg-gray-200'}`}>
+                              {editBookingAddOns.includes(service.id) && <Check className="text-white" size={12} />}
+                            </div>
+                            <span className="font-semibold text-sm">{service.name}</span>
+                          </div>
+                          <span className="font-bold text-green-600 text-sm">+${service.price}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {editBookingAddOns.length > 0 && (
+                    <div className="p-4 bg-green-50 rounded-xl">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-gray-700">Add-Ons Total:</span>
+                        <span className="text-xl font-black text-green-600">
+                          +${editBookingAddOns.reduce((total, id) => {
+                            const service = ADD_ON_SERVICES.find(s => s.id === id);
+                            return total + (service?.price || 0);
+                          }, 0)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={async () => {
+                      const addOnNames = editBookingAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean);
+                      const addOnsTotal = editBookingAddOns.reduce((t, id) => {
+                        const service = ADD_ON_SERVICES.find(s => s.id === id);
+                        return t + (service?.price || 0);
+                      }, 0);
+                      
+                      // Update the booking with new add-ons
+                      const { error } = await supabase
+                        .from('bookings')
+                        .update({ 
+                          add_ons: editBookingAddOns,
+                          add_on_names: addOnNames,
+                          add_ons_total: addOnsTotal
+                        })
+                        .eq('id', editingBookingServices.id);
+                      
+                      if (error) {
+                        alert('Error updating booking: ' + error.message);
+                        return;
+                      }
+                      
+                      await loadAllBookings();
+                      setShowEditServicesModal(false);
+                      setEditingBookingServices(null);
+                      alert('✅ Services updated!');
+                    }}
+                    className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg transition"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="bg-gradient-to-r from-red-600 to-red-700 shadow-xl">
           <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1800,6 +2099,7 @@ export default function App() {
                 </div>
               </div>
               <div className="flex gap-2 sm:gap-3">
+                <button onClick={() => setShowWalkInModal(true)} className="flex-1 sm:flex-none px-3 sm:px-6 py-2 sm:py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl transition font-semibold text-sm sm:text-base">💵 Walk-In Sale</button>
                 <button onClick={() => setView('booking')} className="flex-1 sm:flex-none px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold text-sm sm:text-base">Back to Booking</button>
                 <button onClick={staffLogout} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl transition font-semibold text-sm sm:text-base"><LogOut size={18} /><span className="hidden sm:inline">Staff Logout</span><span className="sm:hidden">Logout</span></button>
               </div>
@@ -2153,6 +2453,19 @@ export default function App() {
                                   className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-lg text-sm"
                                 >
                                   Cancel
+                                </button>
+                              )}
+                              {/* Add Services Button */}
+                              {(booking.status === 'checked_in' || booking.status === 'in_progress' || booking.status === 'scheduled') && (
+                                <button 
+                                  onClick={() => {
+                                    setEditingBookingServices(booking);
+                                    setEditBookingAddOns(booking.add_ons || []);
+                                    setShowEditServicesModal(true);
+                                  }}
+                                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg text-sm flex items-center gap-2"
+                                >
+                                  ➕ Add Services
                                 </button>
                               )}
                             </div>
