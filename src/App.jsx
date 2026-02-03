@@ -297,6 +297,7 @@ export default function App() {
   const [fdPhoneSearch, setFdPhoneSearch] = useState('');
   const [fdSearchResults, setFdSearchResults] = useState([]);
   const [fdSelectedCustomer, setFdSelectedCustomer] = useState(null);
+  const [fdCustomerHistory, setFdCustomerHistory] = useState([]); // Past bookings for selected customer
   const [fdSelectedPets, setFdSelectedPets] = useState([]);
   const [fdSelectedService, setFdSelectedService] = useState('');
   const [fdSelectedAddOns, setFdSelectedAddOns] = useState([]);
@@ -1030,6 +1031,17 @@ export default function App() {
              c.name?.toLowerCase().includes(searchTerm.toLowerCase());
     });
     setFdSearchResults(results);
+  };
+
+  // Load past booking history for a customer
+  const loadCustomerHistory = async (customerId) => {
+    const { data } = await supabase
+      .from('bookings')
+      .select('*, dogs(name, breed), groomers(name), services(name)')
+      .eq('customer_id', customerId)
+      .order('appointment_date', { ascending: false })
+      .limit(20);
+    setFdCustomerHistory(data || []);
   };
 
   // Front Desk: Create new customer
@@ -2734,7 +2746,7 @@ export default function App() {
                         {fdSearchResults.map(customer => (
                           <button 
                             key={customer.id}
-                            onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); }}
+                            onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); }}
                             className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
                           >
                             <p className="font-bold text-gray-900">{customer.name}</p>
@@ -2778,9 +2790,52 @@ export default function App() {
                           <p className="text-gray-600">{fdSelectedCustomer.phone}</p>
                           {fdSelectedCustomer.email && <p className="text-gray-500 text-sm">{fdSelectedCustomer.email}</p>}
                         </div>
-                        <button onClick={() => { setFdSelectedCustomer(null); setFdSelectedPets([]); }} className="text-red-600 hover:text-red-800 font-bold">Change</button>
+                        <button onClick={() => { setFdSelectedCustomer(null); setFdSelectedPets([]); setFdCustomerHistory([]); }} className="text-red-600 hover:text-red-800 font-bold">Change</button>
                       </div>
                     </div>
+                    
+                    {/* Customer History */}
+                    {fdCustomerHistory.length > 0 && (
+                      <div className="p-4 bg-gray-50 rounded-xl border-2 border-gray-200 mb-6">
+                        <h4 className="font-bold text-gray-900 text-sm uppercase mb-3">📋 Past Visits ({fdCustomerHistory.length})</h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {fdCustomerHistory.map(b => {
+                            const breedInfo = BREED_DATABASE[b.dogs?.breed];
+                            const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
+                            const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
+                            const displayPrice = b.actual_price !== null ? b.actual_price : basePriceNum;
+                            
+                            return (
+                              <div key={b.id} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-200">
+                                <div>
+                                  <span className="font-semibold text-gray-900">{b.dogs?.name}</span>
+                                  <span className="text-gray-500 text-sm ml-2">{b.services?.name}</span>
+                                  {b.add_on_names && b.add_on_names.length > 0 && (
+                                    <span className="text-purple-500 text-xs ml-2">+{b.add_on_names.length} add-ons</span>
+                                  )}
+                                </div>
+                                <div className="text-right text-sm">
+                                  <span className="font-bold text-green-600">${displayPrice}</span>
+                                  <span className="text-gray-500 ml-2">{b.groomers?.name}</span>
+                                  <span className="text-gray-400 ml-2">{new Date(b.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded font-bold ${
+                                    b.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                    b.status === 'no_show' ? 'bg-red-100 text-red-700' :
+                                    b.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>{b.status === 'completed' ? '✅' : b.status === 'no_show' ? '❌' : b.status === 'cancelled' ? '—' : '⏳'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {fdCustomerHistory.filter(b => b.status === 'no_show').length > 0 && (
+                          <p className="mt-2 text-xs font-bold text-red-600">
+                            ⚠️ {fdCustomerHistory.filter(b => b.status === 'no_show').length} no-show(s) on record
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     <h3 className="font-bold text-gray-900 mb-3">Select Pet(s) <span className="text-gray-500 font-normal text-sm">- click to toggle</span></h3>
                     {fdSelectedPets.length > 0 && (
