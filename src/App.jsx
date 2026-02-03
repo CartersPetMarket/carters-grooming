@@ -298,6 +298,7 @@ export default function App() {
   const [fdSearchResults, setFdSearchResults] = useState([]);
   const [fdSelectedCustomer, setFdSelectedCustomer] = useState(null);
   const [fdCustomerHistory, setFdCustomerHistory] = useState([]); // Past bookings for selected customer
+  const [fdBookingConfirmation, setFdBookingConfirmation] = useState(null); // Confirmation after booking
   const [fdSelectedPets, setFdSelectedPets] = useState([]);
   const [fdSelectedService, setFdSelectedService] = useState('');
   const [fdSelectedAddOns, setFdSelectedAddOns] = useState([]);
@@ -1401,6 +1402,9 @@ export default function App() {
       const bookedByNote = staffMember ? `Booked by ${staffMember.name}` : 'Booked by staff';
       const notesText = overrideNote + staffNote + addOnNotes + bookedByNote;
       
+      const serviceName = allServices.find(s => s.id === fdSelectedService)?.name || 'Service';
+      const addOnNames = fdSelectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean);
+      
       // Create a booking for each selected pet
       for (const pet of fdSelectedPets) {
         const bookingData = {
@@ -1423,7 +1427,6 @@ export default function App() {
         if (result.error) throw result.error;
 
         // Log the activity
-        const serviceName = allServices.find(s => s.id === fdSelectedService)?.name || 'Service';
         await logActivity(
           'booking_created',
           'booking',
@@ -1432,8 +1435,6 @@ export default function App() {
           { petName: pet.name, customerName: fdSelectedCustomer.name, service: serviceName, date: fdSelectedDate, time: slot.time, groomer: slot.groomer, override: !slot.hasRoom }
         );
       }
-      
-      alert(`${fdSelectedPets.length} booking(s) confirmed!`);
       
       // Send confirmation notification
       if (fdSelectedCustomer.phone) {
@@ -1446,14 +1447,30 @@ export default function App() {
         }, fdSelectedCustomer.phone);
       }
       
+      // Build confirmation data
+      setFdBookingConfirmation({
+        customerName: fdSelectedCustomer.name,
+        customerPhone: fdSelectedCustomer.phone,
+        pets: fdSelectedPets.map(p => ({ name: p.name, breed: p.breed })),
+        service: serviceName,
+        addOns: addOnNames,
+        date: new Date(fdSelectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        time: slot.time,
+        groomer: slot.groomer,
+        notes: fdBookingNotes || null,
+        bookedBy: staffMember?.name || 'Staff'
+      });
+      
       await loadAllBookings();
       
-      // Reset form
+      // Fully reset form
+      setFdSelectedCustomer(null);
       setFdSelectedPets([]);
       setFdSelectedService('');
       setFdSelectedAddOns([]);
       setFdBookingNotes('');
       setFdOverrideMode(false);
+      setFdCustomerHistory([]);
     } catch (error) { alert(error.message); }
   };
 
@@ -1828,6 +1845,101 @@ export default function App() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
         <BookingPinModal />
+        
+        {/* Front Desk Booking Confirmation Modal */}
+        {fdBookingConfirmation && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="p-6">
+                {/* Success Header */}
+                <div className="text-center mb-6">
+                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="text-green-600" size={40} />
+                  </div>
+                  <h2 className="text-2xl font-black text-gray-900">Booking Confirmed!</h2>
+                  <p className="text-gray-500 mt-1">Appointment has been scheduled</p>
+                </div>
+                
+                {/* Booking Details */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3 mb-6">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">Customer</span>
+                    <span className="font-bold text-gray-900">{fdBookingConfirmation.customerName}</span>
+                  </div>
+                  {fdBookingConfirmation.customerPhone && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 font-medium">Phone</span>
+                      <span className="text-gray-900">{fdBookingConfirmation.customerPhone}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">Pet(s)</span>
+                    <span className="font-bold text-gray-900">
+                      {fdBookingConfirmation.pets.map(p => `${p.name} (${p.breed})`).join(', ')}
+                    </span>
+                  </div>
+                  <div className="border-t border-gray-200 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 font-medium">Service</span>
+                      <span className="font-bold text-gray-900">{fdBookingConfirmation.service}</span>
+                    </div>
+                  </div>
+                  {fdBookingConfirmation.addOns.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 font-medium">Add-Ons</span>
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        {fdBookingConfirmation.addOns.map((name, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">{name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="border-t border-gray-200 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 font-medium">Date</span>
+                      <span className="font-bold text-gray-900">{fdBookingConfirmation.date}</span>
+                    </div>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-gray-600 font-medium">Time</span>
+                      <span className="font-bold text-gray-900">{fdBookingConfirmation.time}</span>
+                    </div>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-gray-600 font-medium">Groomer</span>
+                      <span className="font-bold text-gray-900">{fdBookingConfirmation.groomer}</span>
+                    </div>
+                  </div>
+                  {fdBookingConfirmation.notes && (
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 font-medium">Notes</span>
+                        <span className="text-gray-700 text-sm">{fdBookingConfirmation.notes}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="border-t border-gray-200 pt-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 font-medium">Booked By</span>
+                      <span className="text-gray-700">{fdBookingConfirmation.bookedBy}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {fdBookingConfirmation.customerPhone && (
+                  <p className="text-center text-sm text-green-600 font-semibold mb-4">
+                    📱 Confirmation text sent to {fdBookingConfirmation.customerPhone}
+                  </p>
+                )}
+                
+                <button
+                  onClick={() => setFdBookingConfirmation(null)}
+                  className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg transition"
+                >
+                  Done — Book Another
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Walk-In Sale Modal */}
         {showWalkInModal && (
