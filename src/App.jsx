@@ -7,6 +7,39 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g'
 );
 
+// ==================== INPUT SANITIZATION & VALIDATION ====================
+// Strips HTML tags, trims whitespace, enforces max length
+const sanitize = (str, maxLength = 200) => {
+  if (!str || typeof str !== 'string') return '';
+  return str.replace(/<[^>]*>/g, '').replace(/[<>"'`;]/g, '').trim().slice(0, maxLength);
+};
+
+// Validate and normalize phone number (digits only, 10-11 digits for US)
+const sanitizePhone = (phone) => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 11) return digits; // let it through but cleaned
+  return digits;
+};
+
+// Validate email format
+const isValidEmail = (email) => {
+  if (!email) return true; // optional field
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+};
+
+// Sanitize notes (allow more length, still strip HTML)
+const sanitizeNotes = (str) => sanitize(str, 1000);
+
+// Sanitize name (letters, spaces, hyphens, apostrophes only)
+// Sanitize name - more permissive, allows unicode letters
+const sanitizeName = (str) => {
+  if (!str || typeof str !== 'string') return '';
+  // Remove HTML tags, then allow letters (including unicode), spaces, hyphens, apostrophes
+  return str.replace(/<[^>]*>/g, '').replace(/[^\p{L}\s\-'.]/gu, '').trim().slice(0, 100);
+};
+// ========================================================================
+
 const BREED_DATABASE = {
   'Affenpinscher': { bath: 45, groom: 65, weight: 9 },
   'Afghan Hound': { bath: 65, groom: 85, weight: 55 },
@@ -391,12 +424,19 @@ export default function App() {
         setUser(session.user);
         
         // Upsert customer record (handles both new and existing users safely)
-        await supabase.from('customers').upsert({
+        const customerName = sanitizeName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0]) || 'Customer';
+        const customerPhone = sanitizePhone(session.user.user_metadata?.phone || '');
+        
+        const { error: upsertError } = await supabase.from('customers').upsert({
           id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
-          phone: session.user.user_metadata?.phone || ''
-        }, { onConflict: 'id', ignoreDuplicates: true });
+          email: session.user.email?.toLowerCase(),
+          name: customerName,
+          phone: customerPhone
+        }, { onConflict: 'id' });
+        
+        if (upsertError) {
+          console.error('Customer upsert error:', upsertError);
+        }
         
         await loadUserData(session.user.id);
         setView('booking');
@@ -438,12 +478,19 @@ export default function App() {
       setUser(user);
       
       // Upsert customer record (handles both new and existing users safely)
-      await supabase.from('customers').upsert({
+      const customerName = sanitizeName(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]) || 'Customer';
+      const customerPhone = sanitizePhone(user.user_metadata?.phone || '');
+      
+      const { error: upsertError } = await supabase.from('customers').upsert({
         id: user.id,
-        email: user.email,
-        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-        phone: user.user_metadata?.phone || ''
-      }, { onConflict: 'id', ignoreDuplicates: true });
+        email: user.email?.toLowerCase(),
+        name: customerName,
+        phone: customerPhone
+      }, { onConflict: 'id' });
+      
+      if (upsertError) {
+        console.error('Customer upsert error:', upsertError);
+      }
       
       await loadUserData(user.id);
       setView('booking');
@@ -560,7 +607,8 @@ export default function App() {
   };
 
   const verifyPin = async () => {
-    if (!pinInput || pinInput.length < 4) {
+    const cleanPin = pinInput.replace(/\D/g, '');
+    if (!cleanPin || cleanPin.length < 4) {
       setPinError('Please enter a valid PIN');
       return;
     }
@@ -568,7 +616,7 @@ export default function App() {
     const { data: staffMember } = await supabase
       .from('staff')
       .select('*')
-      .eq('pin', pinInput)
+      .eq('pin', cleanPin)
       .eq('active', true)
       .single();
     
@@ -599,16 +647,20 @@ export default function App() {
   };
 
   const addStaffMember = async () => {
-    if (!newStaffName || !newStaffPin || newStaffPin.length < 4) {
-      alert('Please enter name and a PIN (min 4 digits)');
+    const cleanName = sanitizeName(newStaffName);
+    const cleanPin = newStaffPin.replace(/\D/g, ''); // digits only
+    if (!cleanName || cleanName.length < 2 || !cleanPin || cleanPin.length < 4) {
+      alert('Please enter a valid name and a PIN (min 4 digits)');
       return;
     }
+    const validRoles = ['front_desk', 'groomer', 'admin'];
+    if (!validRoles.includes(newStaffRole)) { alert('Invalid role'); return; }
     
     // Check if PIN already exists
     const { data: existing } = await supabase
       .from('staff')
       .select('id')
-      .eq('pin', newStaffPin);
+      .eq('pin', cleanPin);
     
     if (existing && existing.length > 0) {
       alert('This PIN is already in use');
@@ -616,8 +668,8 @@ export default function App() {
     }
     
     const { error } = await supabase.from('staff').insert([{
-      name: newStaffName,
-      pin: newStaffPin,
+      name: cleanName,
+      pin: cleanPin,
       role: newStaffRole
     }]);
     
@@ -653,24 +705,29 @@ export default function App() {
 
   const handleSignup = async () => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password, options: { data: { name, phone } } });
+      const cleanName = sanitizeName(name);
+      const cleanPhone = sanitizePhone(phone);
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanName || cleanName.length < 2) { alert('Please enter a valid name'); return; }
+      if (!cleanPhone || cleanPhone.length < 10) { alert('Please enter a valid phone number'); return; }
+      if (!isValidEmail(cleanEmail)) { alert('Please enter a valid email'); return; }
+      if (password.length < 6) { alert('Password must be at least 6 characters'); return; }
+      
+      const { data: authData, error: authError } = await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { name: cleanName, phone: cleanPhone } } });
       if (authError) throw authError;
-      // Use upsert to handle edge cases where customer record might already exist
       const { error: customerError } = await supabase.from('customers').upsert({ 
         id: authData.user.id, 
-        email, 
-        name, 
-        phone, 
+        email: cleanEmail, 
+        name: cleanName, 
+        phone: cleanPhone, 
         password_hash: 'handled_by_auth' 
       }, { onConflict: 'id' });
       if (customerError) {
-        // Check for duplicate phone number
         if (customerError.code === '23505' && customerError.message.includes('phone')) {
           throw new Error('This phone number is already registered. Please use a different number or log in to your existing account.');
         }
         throw customerError;
       }
-      // Auto-login after signup (no email verification required)
       setUser(authData.user);
       await loadUserData(authData.user.id);
       setView('booking');
@@ -690,12 +747,13 @@ export default function App() {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setView('landing'); setPetVaccinations({}); };
 
   const handleAddDog = async () => {
-    if (!newDog.name || !newDog.breed) { alert('Please fill in dog name and breed'); return; }
+    const cleanName = sanitizeName(newDog.name);
+    if (!cleanName || !newDog.breed) { alert('Please fill in dog name and breed'); return; }
+    if (!BREED_DATABASE[newDog.breed]) { alert('Please select a valid breed'); return; }
     try {
-      // Auto-calculate size from breed weight (35 and under = small, 36+ = large)
       const breedWeight = BREED_DATABASE[newDog.breed]?.weight || 35;
       const autoSize = breedWeight <= 35 ? 'small' : 'large';
-      const { data, error } = await supabase.from('dogs').insert([{ customer_id: user.id, name: newDog.name, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
+      const { data, error } = await supabase.from('dogs').insert([{ customer_id: user.id, name: cleanName, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
       if (error) throw error;
       setDogs([...dogs, data[0]]);
       setNewDog({ name: '', breed: '', size: 'small' });
@@ -817,7 +875,8 @@ export default function App() {
       const vax = getDogVaxStatus(selectedDog.id);
       const vaxNotes = `Rabies: ${vax.rabiesMethod === 'upload' ? 'Uploaded' : 'Bringing physical copy'}`;
       const addOnNotes = selectedAddOns.length > 0 ? 'Add-ons: ' + selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' : '';
-      const specialNotes = hasSpecialNeeds && bookingNotes ? '⚠️ SPECIAL NEEDS: ' + bookingNotes + ' | ' : '';
+      const cleanBookingNotes = sanitizeNotes(bookingNotes);
+      const specialNotes = hasSpecialNeeds && cleanBookingNotes ? '⚠️ SPECIAL NEEDS: ' + cleanBookingNotes + ' | ' : '';
       const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent }]);
       if (error) throw error;
       
@@ -1047,14 +1106,16 @@ export default function App() {
 
   // Front Desk: Create new customer
   const createFdCustomer = async () => {
-    if (!fdNewCustomer.name || !fdNewCustomer.phone) {
-      alert('Name and phone are required');
-      return;
-    }
+    const cleanName = sanitizeName(fdNewCustomer.name);
+    const cleanPhone = sanitizePhone(fdNewCustomer.phone);
+    const cleanEmail = fdNewCustomer.email ? fdNewCustomer.email.trim().toLowerCase() : null;
+    if (!cleanName || cleanName.length < 2) { alert('Please enter a valid name'); return; }
+    if (!cleanPhone || cleanPhone.length < 10) { alert('Please enter a valid phone number (10+ digits)'); return; }
+    if (cleanEmail && !isValidEmail(cleanEmail)) { alert('Please enter a valid email'); return; }
     try {
       const tempId = crypto.randomUUID();
       const { data, error } = await supabase.from('customers')
-        .insert([{ id: tempId, name: fdNewCustomer.name, phone: fdNewCustomer.phone, email: fdNewCustomer.email || null }])
+        .insert([{ id: tempId, name: cleanName, phone: cleanPhone, email: cleanEmail }])
         .select();
       if (error) throw error;
       await loadAllBookings();
@@ -1066,15 +1127,17 @@ export default function App() {
 
   // Front Desk: Create new pet
   const createFdPet = async () => {
-    if (!fdNewPet.name || !fdNewPet.breed || !fdSelectedCustomer) {
+    const cleanName = sanitizeName(fdNewPet.name);
+    if (!cleanName || !fdNewPet.breed || !fdSelectedCustomer) {
       alert('Pet name and breed are required');
       return;
     }
+    if (!BREED_DATABASE[fdNewPet.breed]) { alert('Please select a valid breed'); return; }
     try {
       const breedInfo = BREED_DATABASE[fdNewPet.breed];
       const size = breedInfo && breedInfo.weight > 35 ? 'large' : 'small';
       const { data, error } = await supabase.from('dogs')
-        .insert([{ customer_id: fdSelectedCustomer.id, name: fdNewPet.name, breed: fdNewPet.breed, size }])
+        .insert([{ customer_id: fdSelectedCustomer.id, name: cleanName, breed: fdNewPet.breed, size }])
         .select();
       if (error) throw error;
       await loadAllBookings();
@@ -1106,7 +1169,8 @@ export default function App() {
 
   // Verify PIN and complete booking
   const verifyBookingPin = async () => {
-    if (!bookingPinInput || bookingPinInput.length < 4) {
+    const cleanPin = bookingPinInput.replace(/\D/g, '');
+    if (!cleanPin || cleanPin.length < 4) {
       setBookingPinError('Please enter a valid PIN');
       return;
     }
@@ -1114,7 +1178,7 @@ export default function App() {
     const { data: staffMember } = await supabase
       .from('staff')
       .select('*')
-      .eq('pin', bookingPinInput)
+      .eq('pin', cleanPin)
       .eq('active', true)
       .single();
     
@@ -1398,8 +1462,9 @@ export default function App() {
         ? 'Add-ons: ' + fdSelectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' 
         : '';
       const overrideNote = !slot.hasRoom ? '⚠️ ADMIN OVERRIDE - Slot was full | ' : '';
-      const staffNote = fdBookingNotes ? `📝 ${fdBookingNotes} | ` : '';
-      const bookedByNote = staffMember ? `Booked by ${staffMember.name}` : 'Booked by staff';
+      const cleanNotes = sanitizeNotes(fdBookingNotes);
+      const staffNote = cleanNotes ? `📝 ${cleanNotes} | ` : '';
+      const bookedByNote = staffMember ? `Booked by ${sanitize(staffMember.name)}` : 'Booked by staff';
       const notesText = overrideNote + staffNote + addOnNotes + bookedByNote;
       
       const serviceName = allServices.find(s => s.id === fdSelectedService)?.name || 'Service';
@@ -1778,21 +1843,22 @@ export default function App() {
     };
 
     const saveNotes = async (bookingId) => {
-      await supabase.from('bookings').update({ notes: noteText }).eq('id', bookingId);
+      await supabase.from('bookings').update({ notes: sanitizeNotes(noteText) }).eq('id', bookingId);
       await loadAllBookings();
       setEditingNotes(null);
       setNoteText('');
     };
 
     const savePetNotes = async (dogId) => {
-      await supabase.from('dogs').update({ notes: petNotesText }).eq('id', dogId);
+      const cleanNotes = sanitizeNotes(petNotesText);
+      await supabase.from('dogs').update({ notes: cleanNotes }).eq('id', dogId);
       await loadAllBookings();
       setEditingPetNotes(false);
-      setSelectedPet({ ...selectedPet, notes: petNotesText });
+      setSelectedPet({ ...selectedPet, notes: cleanNotes });
     };
 
     const saveGroomerNotesFromCard = async (dogId) => {
-      await supabase.from('dogs').update({ notes: groomerNotesText }).eq('id', dogId);
+      await supabase.from('dogs').update({ notes: sanitizeNotes(groomerNotesText) }).eq('id', dogId);
       await loadAllBookings();
       setEditingGroomerNotes(null);
       setGroomerNotesText('');
@@ -1800,9 +1866,11 @@ export default function App() {
 
     const addCustomCharge = async (bookingId) => {
       if (!newChargeName || !newChargePrice) return;
+      const cleanChargeName = sanitize(newChargeName, 100);
+      const cleanPrice = Math.max(0, Math.min(9999, parseFloat(newChargePrice) || 0));
       const booking = allBookings.find(b => b.id === bookingId);
       const existingCharges = booking?.extra_charges || [];
-      const newCharges = [...existingCharges, { name: newChargeName, price: parseFloat(newChargePrice) }];
+      const newCharges = [...existingCharges, { name: cleanChargeName, price: cleanPrice }];
       await supabase.from('bookings').update({ extra_charges: newCharges }).eq('id', bookingId);
       await loadAllBookings();
       setAddingChargeToBooking(null);
@@ -2097,12 +2165,12 @@ export default function App() {
                       
                       // Create a walk-in record
                       const { error } = await supabase.from('walk_in_sales').insert({
-                        customer_name: walkInCustomerName || 'Walk-in',
-                        pet_name: walkInPetName || null,
+                        customer_name: sanitize(walkInCustomerName) || 'Walk-in',
+                        pet_name: sanitize(walkInPetName) || null,
                         services: walkInServices,
                         service_names: serviceNames,
                         total_price: total,
-                        notes: walkInNotes || null,
+                        notes: sanitizeNotes(walkInNotes) || null,
                         staff_name: currentStaff?.name || 'Staff',
                         groomer_id: walkInGroomer,
                         groomer_name: selectedGroomer?.name || 'Unknown',
@@ -2481,7 +2549,8 @@ export default function App() {
                                 <span className="inline-flex items-center gap-1 ml-1">
                                   $<input type="number" value={bookingPriceValue} onChange={(e) => setBookingPriceValue(e.target.value)} className="w-20 p-1 border rounded" />
                                   <button onClick={async () => {
-                                    await supabase.from('bookings').update({ actual_price: parseFloat(bookingPriceValue) }).eq('id', booking.id);
+                                    const price = Math.max(0, Math.min(9999, parseFloat(bookingPriceValue) || 0));
+                                    await supabase.from('bookings').update({ actual_price: price }).eq('id', booking.id);
                                     await loadAllBookings();
                                     setEditingBookingPrice(null);
                                   }} className="text-green-600 font-bold">✓</button>
@@ -3420,8 +3489,9 @@ export default function App() {
                                     />
                                     <button 
                                       onClick={async () => {
-                                        await supabase.from('bookings').update({ actual_price: parseFloat(bookingPriceValue) }).eq('id', b.id);
-                                        const updated = reportData.map(r => r.id === b.id ? { ...r, actual_price: parseFloat(bookingPriceValue) } : r);
+                                        const price = Math.max(0, Math.min(9999, parseFloat(bookingPriceValue) || 0));
+                                        await supabase.from('bookings').update({ actual_price: price }).eq('id', b.id);
+                                        const updated = reportData.map(r => r.id === b.id ? { ...r, actual_price: price } : r);
                                         setReportData(updated);
                                         setEditingBookingPrice(null);
                                       }}
@@ -3617,7 +3687,7 @@ export default function App() {
                   <button 
                     onClick={async () => {
                       if (!newGroomerName.trim()) return;
-                      await supabase.from('groomers').insert([{ name: newGroomerName.trim(), active: true }]);
+                      await supabase.from('groomers').insert([{ name: sanitizeName(newGroomerName), active: true }]);
                       setNewGroomerName('');
                       await loadAllBookings();
                     }}
