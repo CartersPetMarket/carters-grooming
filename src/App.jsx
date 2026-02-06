@@ -395,7 +395,8 @@ export default function App() {
           id: session.user.id,
           email: session.user.email,
           name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
-          phone: session.user.user_metadata?.phone || ''
+          phone: session.user.user_metadata?.phone || '',
+          password_hash: 'oauth_user'
         }, { onConflict: 'id' });
         
         if (custErr) {
@@ -452,7 +453,8 @@ export default function App() {
         id: user.id,
         email: user.email,
         name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-        phone: user.user_metadata?.phone || ''
+        phone: user.user_metadata?.phone || '',
+        password_hash: 'oauth_user'
       }, { onConflict: 'id' });
       
       if (custErr) {
@@ -722,7 +724,8 @@ export default function App() {
             id: user.id,
             email: user.email,
             name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-            phone: user.user_metadata?.phone || ''
+            phone: user.user_metadata?.phone || '',
+            password_hash: 'oauth_user'
           }, { onConflict: 'id' });
           if (!fixErr) {
             // Retry the dog insert
