@@ -427,24 +427,17 @@ export default function App() {
         const customerName = sanitizeName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0]) || 'Customer';
         const customerPhone = session.user.user_metadata?.phone || null;
         
-        // Check if customer exists
-        const { data: existingCustomer } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('id', session.user.id)
-          .single();
+        // Try to insert - if already exists, that's fine
+        const { error: insertError } = await supabase.from('customers').insert({
+          id: session.user.id,
+          email: session.user.email?.toLowerCase(),
+          name: customerName,
+          phone: customerPhone
+        });
         
-        if (!existingCustomer) {
-          // Insert new customer
-          const { error: insertError } = await supabase.from('customers').insert({
-            id: session.user.id,
-            email: session.user.email?.toLowerCase(),
-            name: customerName,
-            phone: customerPhone
-          });
-          if (insertError) {
-            console.error('Customer insert error:', insertError);
-          }
+        // Ignore duplicate key errors (customer already exists)
+        if (insertError && !insertError.message?.includes('duplicate')) {
+          console.error('Customer insert error:', insertError);
         }
         
         await loadUserData(session.user.id);
@@ -490,24 +483,17 @@ export default function App() {
       const customerName = sanitizeName(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]) || 'Customer';
       const customerPhone = user.user_metadata?.phone || null;
       
-      // Check if customer exists
-      const { data: existingCustomer } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('id', user.id)
-        .single();
+      // Try to insert - if already exists, that's fine
+      const { error: insertError } = await supabase.from('customers').insert({
+        id: user.id,
+        email: user.email?.toLowerCase(),
+        name: customerName,
+        phone: customerPhone
+      });
       
-      if (!existingCustomer) {
-        // Insert new customer
-        const { error: insertError } = await supabase.from('customers').insert({
-          id: user.id,
-          email: user.email?.toLowerCase(),
-          name: customerName,
-          phone: customerPhone
-        });
-        if (insertError) {
-          console.error('Customer insert error:', insertError);
-        }
+      // Ignore duplicate key errors (customer already exists)
+      if (insertError && !insertError.message?.includes('duplicate')) {
+        console.error('Customer insert error:', insertError);
       }
       
       await loadUserData(user.id);
