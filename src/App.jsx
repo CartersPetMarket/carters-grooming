@@ -388,30 +388,35 @@ export default function App() {
     // Listen for auth state changes (handles OAuth redirect)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        setUser(session.user);
-        
-        // Ensure customer record exists for OAuth users (insert or update)
-        const { error: custErr } = await supabase.from('customers').upsert({
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
-          phone: session.user.user_metadata?.phone || '',
-          password_hash: 'oauth_user'
-        }, { onConflict: 'id' });
-        
-        if (custErr) {
-          console.error('OAuth customer upsert failed:', custErr);
-          // Verify the record exists anyway (may have been created another way)
-          const { data: existing } = await supabase.from('customers').select('id').eq('id', session.user.id).single();
-          if (!existing) {
-            console.error('CRITICAL: No customer record for user', session.user.id);
-            alert('Account setup failed. Please try signing in again or contact support.');
+        try {
+          setUser(session.user);
+          
+          // Ensure customer record exists for OAuth users (insert or update)
+          const { error: custErr } = await supabase.from('customers').upsert({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
+            phone: session.user.user_metadata?.phone || '',
+            password_hash: 'oauth_user'
+          }, { onConflict: 'id' });
+          
+          if (custErr) {
+            console.error('OAuth customer upsert failed:', custErr);
+            // Verify the record exists anyway (may have been created another way)
+            const { data: existing } = await supabase.from('customers').select('id').eq('id', session.user.id).single();
+            if (!existing) {
+              console.error('CRITICAL: No customer record for user', session.user.id);
+              alert('Account setup failed. Please try signing in again or contact support.');
+            }
           }
+          
+          await loadUserData(session.user.id);
+          setView('booking');
+        } catch (err) {
+          console.error('Auth state change error:', err);
+        } finally {
+          setLoading(false);
         }
-        
-        await loadUserData(session.user.id);
-        setView('booking');
-        setLoading(false);
       }
     });
     
@@ -443,76 +448,81 @@ export default function App() {
   };
 
   const checkUser = async () => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      const user = data.session.user;
-      setUser(user);
-      
-      // Ensure customer record exists (insert or update)
-      const { error: custErr } = await supabase.from('customers').upsert({
-        id: user.id,
-        email: user.email,
-        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-        phone: user.user_metadata?.phone || '',
-        password_hash: 'oauth_user'
-      }, { onConflict: 'id' });
-      
-      if (custErr) {
-        console.error('checkUser customer upsert failed:', custErr);
-        const { data: existing } = await supabase.from('customers').select('id').eq('id', user.id).single();
-        if (!existing) {
-          console.error('CRITICAL: No customer record for user', user.id);
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        const user = data.session.user;
+        setUser(user);
+        
+        // Ensure customer record exists (insert or update)
+        const { error: custErr } = await supabase.from('customers').upsert({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
+          phone: user.user_metadata?.phone || '',
+          password_hash: 'oauth_user'
+        }, { onConflict: 'id' });
+        
+        if (custErr) {
+          console.error('checkUser customer upsert failed:', custErr);
+          const { data: existing } = await supabase.from('customers').select('id').eq('id', user.id).single();
+          if (!existing) {
+            console.error('CRITICAL: No customer record for user', user.id);
+          }
         }
+        
+        await loadUserData(user.id);
+        setView('booking');
       }
-      
-      await loadUserData(user.id);
-      setView('booking');
+    } catch (err) {
+      console.error('checkUser error:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadUserData = async (userId) => {
-    const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
-    setDogs(dogsData || []);
-    const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
-    setGroomers(groomersData || []);
-    // Load date-based schedule slots for customer booking
-    const today = new Date().toISOString().split('T')[0];
-    const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut);
-    setSchedules(slotsData || []);
-    const { data: servicesData } = await supabase.from('services').select('*');
-    setAllServices(servicesData || []);
-    const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
-    setBookings(bookingsData || []);
-    // Load ALL bookings for capacity checking (minimal fields, non-canceled only)
-    const { data: capacityBookings } = await supabase
-      .from('bookings')
-      .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
-      .gte('appointment_date', today)
-      .lte('appointment_date', twoMonthsOut)
-      .not('status', 'in', '("canceled","no_show")');
-    setAllBookings(capacityBookings || []);
-    // Load past completed bookings
-    const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
-    setPastBookings(pastData || []);
-    // Load vaccinations from database
-    const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
-    const vaxMap = {};
-    (vaxData || []).forEach(v => {
-      vaxMap[v.dog_id] = {
-        rabies: !!v.rabies_status,
-        rabiesMethod: v.rabies_status,
-        rabiesFile: v.rabies_file,
-        dhpp: !!v.dhpp_status,
-        dhppMethod: v.dhpp_status,
-        dhppFile: v.dhpp_file,
-        bordetella: !!v.bordetella_status,
-        bordetellaMethod: v.bordetella_status,
-        bordetellaFile: v.bordetella_file
-      };
-    });
-    setPetVaccinations(vaxMap);
+    try {
+      const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
+      setDogs(dogsData || []);
+      const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
+      setGroomers(groomersData || []);
+      const today = new Date().toISOString().split('T')[0];
+      const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut);
+      setSchedules(slotsData || []);
+      const { data: servicesData } = await supabase.from('services').select('*');
+      setAllServices(servicesData || []);
+      const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
+      setBookings(bookingsData || []);
+      const { data: capacityBookings } = await supabase
+        .from('bookings')
+        .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
+        .gte('appointment_date', today)
+        .lte('appointment_date', twoMonthsOut)
+        .not('status', 'in', '("canceled","no_show")');
+      setAllBookings(capacityBookings || []);
+      const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
+      setPastBookings(pastData || []);
+      const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
+      const vaxMap = {};
+      (vaxData || []).forEach(v => {
+        vaxMap[v.dog_id] = {
+          rabies: !!v.rabies_status,
+          rabiesMethod: v.rabies_status,
+          rabiesFile: v.rabies_file,
+          dhpp: !!v.dhpp_status,
+          dhppMethod: v.dhpp_status,
+          dhppFile: v.dhpp_file,
+          bordetella: !!v.bordetella_status,
+          bordetellaMethod: v.bordetella_status,
+          bordetellaFile: v.bordetella_file
+        };
+      });
+      setPetVaccinations(vaxMap);
+    } catch (err) {
+      console.error('loadUserData error:', err);
+    }
   };
 
   const loadAllBookings = async () => {
