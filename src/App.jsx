@@ -383,11 +383,21 @@ export default function App() {
       window.location.hash = '';
     }
     
-    checkUser();
+    // Safety net: if loading is still true after 8 seconds, force it off
+    const loadingTimeout = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) console.warn('Loading timeout hit - forcing app to render');
+        return false;
+      });
+    }, 8000);
+    
+    let userHandled = false;
+    
+    checkUser().then(() => { userHandled = true; });
     
     // Listen for auth state changes (handles OAuth redirect)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
+      if ((event === 'SIGNED_IN') && session && !userHandled) {
         try {
           setUser(session.user);
           
@@ -418,7 +428,7 @@ export default function App() {
       }
     });
     
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(loadingTimeout); };
   }, []);
 
   const handlePasswordReset = async () => {
@@ -1421,15 +1431,6 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200 mb-6">
-            <p className="font-bold text-purple-900 mb-3">📅 Book {completedBooking.petName}'s next groom?</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => bookAgainInWeeks(4)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">4 weeks</button>
-              <button onClick={() => bookAgainInWeeks(6)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">6 weeks</button>
-              <button onClick={() => bookAgainInWeeks(8)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">8 weeks</button>
-            </div>
-          </div>
-
           {/* Book another pet at the same appointment time */}
           {dogs.filter(d => d.id !== completedBooking.petId).length > 0 && (
             <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-200 mb-6">
@@ -1452,6 +1453,15 @@ export default function App() {
               </button>
             </div>
           )}
+
+          <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200 mb-6">
+            <p className="font-bold text-purple-900 mb-3">📅 Book {completedBooking.petName}'s next groom?</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => bookAgainInWeeks(4)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">4 weeks</button>
+              <button onClick={() => bookAgainInWeeks(6)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">6 weeks</button>
+              <button onClick={() => bookAgainInWeeks(8)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">8 weeks</button>
+            </div>
+          </div>
           
           <div className="space-y-3">
             <button 
