@@ -391,7 +391,6 @@ export default function App() {
         try {
           setUser(session.user);
           
-          // Ensure customer record exists for OAuth users (insert or update)
           const { error: custErr } = await supabase.from('customers').upsert({
             id: session.user.id,
             email: session.user.email,
@@ -402,7 +401,6 @@ export default function App() {
           
           if (custErr) {
             console.error('OAuth customer upsert failed:', custErr);
-            // Verify the record exists anyway (may have been created another way)
             const { data: existing } = await supabase.from('customers').select('id').eq('id', session.user.id).single();
             if (!existing) {
               console.error('CRITICAL: No customer record for user', session.user.id);
@@ -454,7 +452,6 @@ export default function App() {
         const user = data.session.user;
         setUser(user);
         
-        // Ensure customer record exists (insert or update)
         const { error: custErr } = await supabase.from('customers').upsert({
           id: user.id,
           email: user.email,
@@ -483,43 +480,47 @@ export default function App() {
 
   const loadUserData = async (userId) => {
     try {
-      const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
-      setDogs(dogsData || []);
-      const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
-      setGroomers(groomersData || []);
-      const today = new Date().toISOString().split('T')[0];
-      const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut);
-      setSchedules(slotsData || []);
-      const { data: servicesData } = await supabase.from('services').select('*');
-      setAllServices(servicesData || []);
-      const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
-      setBookings(bookingsData || []);
-      const { data: capacityBookings } = await supabase
-        .from('bookings')
-        .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
-        .gte('appointment_date', today)
-        .lte('appointment_date', twoMonthsOut)
-        .not('status', 'in', '("canceled","no_show")');
-      setAllBookings(capacityBookings || []);
-      const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
-      setPastBookings(pastData || []);
-      const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
-      const vaxMap = {};
-      (vaxData || []).forEach(v => {
-        vaxMap[v.dog_id] = {
-          rabies: !!v.rabies_status,
-          rabiesMethod: v.rabies_status,
-          rabiesFile: v.rabies_file,
-          dhpp: !!v.dhpp_status,
-          dhppMethod: v.dhpp_status,
-          dhppFile: v.dhpp_file,
-          bordetella: !!v.bordetella_status,
-          bordetellaMethod: v.bordetella_status,
-          bordetellaFile: v.bordetella_file
-        };
-      });
-      setPetVaccinations(vaxMap);
+    const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
+    setDogs(dogsData || []);
+    const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
+    setGroomers(groomersData || []);
+    // Load date-based schedule slots for customer booking
+    const today = new Date().toISOString().split('T')[0];
+    const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut);
+    setSchedules(slotsData || []);
+    const { data: servicesData } = await supabase.from('services').select('*');
+    setAllServices(servicesData || []);
+    const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
+    setBookings(bookingsData || []);
+    // Load ALL bookings for capacity checking (minimal fields, non-canceled only)
+    const { data: capacityBookings } = await supabase
+      .from('bookings')
+      .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
+      .gte('appointment_date', today)
+      .lte('appointment_date', twoMonthsOut)
+      .not('status', 'in', '("canceled","no_show")');
+    setAllBookings(capacityBookings || []);
+    // Load past completed bookings
+    const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
+    setPastBookings(pastData || []);
+    // Load vaccinations from database
+    const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
+    const vaxMap = {};
+    (vaxData || []).forEach(v => {
+      vaxMap[v.dog_id] = {
+        rabies: !!v.rabies_status,
+        rabiesMethod: v.rabies_status,
+        rabiesFile: v.rabies_file,
+        dhpp: !!v.dhpp_status,
+        dhppMethod: v.dhpp_status,
+        dhppFile: v.dhpp_file,
+        bordetella: !!v.bordetella_status,
+        bordetellaMethod: v.bordetella_status,
+        bordetellaFile: v.bordetella_file
+      };
+    });
+    setPetVaccinations(vaxMap);
     } catch (err) {
       console.error('loadUserData error:', err);
     }
@@ -728,7 +729,6 @@ export default function App() {
       const { data, error } = await supabase.from('dogs').insert([{ customer_id: user.id, name: newDog.name, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
       if (error) {
         if (error.code === '23503') {
-          // Foreign key violation - customer record is missing, try to create it
           console.error('Missing customer record, attempting to create...');
           const { error: fixErr } = await supabase.from('customers').upsert({
             id: user.id,
@@ -738,7 +738,6 @@ export default function App() {
             password_hash: 'oauth_user'
           }, { onConflict: 'id' });
           if (!fixErr) {
-            // Retry the dog insert
             const { data: retryData, error: retryErr } = await supabase.from('dogs').insert([{ customer_id: user.id, name: newDog.name, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
             if (retryErr) throw retryErr;
             setDogs([...dogs, retryData[0]]);
@@ -1430,6 +1429,29 @@ export default function App() {
               <button onClick={() => bookAgainInWeeks(8)} className="py-2 px-3 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold rounded-lg text-sm transition">8 weeks</button>
             </div>
           </div>
+
+          {/* Book another pet at the same appointment time */}
+          {dogs.filter(d => d.id !== completedBooking.petId).length > 0 && (
+            <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-200 mb-6">
+              <p className="font-bold text-orange-900 mb-3">🐾 Need to book another pet at this same time?</p>
+              <button 
+                onClick={() => {
+                  const keepDate = completedBooking.date;
+                  setShowBookingSuccess(false);
+                  setCompletedBooking(null);
+                  setSelectedDog(null);
+                  setSelectedService('');
+                  setSelectedAddOns([]);
+                  setHasSpecialNeeds(false);
+                  setBookingNotes('');
+                  setSelectedDate(keepDate);
+                }}
+                className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold rounded-xl transition shadow-md"
+              >
+                + Add Another Pet to This Appointment
+              </button>
+            </div>
+          )}
           
           <div className="space-y-3">
             <button 
@@ -4529,6 +4551,7 @@ export default function App() {
             {showAddDog && (<div className="mb-4 sm:mb-6 p-4 sm:p-5 bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl border-2 border-red-200 space-y-3 sm:space-y-4"><input type="text" placeholder="Pet's Name" value={newDog.name} onChange={(e) => setNewDog({...newDog, name: e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500" /><select value={newDog.breed} onChange={(e) => setNewDog({...newDog, breed: e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500"><option value="">Select Breed</option>{Object.keys(BREED_DATABASE).filter(b => !b.startsWith('Mixed')).sort().map(breed => (<option key={breed} value={breed}>{breed}</option>))}<option disabled>──────────</option>{Object.keys(BREED_DATABASE).filter(b => b.startsWith('Mixed')).map(breed => (<option key={breed} value={breed}>{breed}</option>))}</select>{newDog.breed && (<div className={`p-3 rounded-xl text-center font-semibold text-sm ${BREED_DATABASE[newDog.breed]?.weight <= 35 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{BREED_DATABASE[newDog.breed]?.weight <= 35 ? '🐕 Small Dog' : '🐕‍🦺 Large Dog'} (avg {BREED_DATABASE[newDog.breed]?.weight} lbs)</div>)}<button onClick={handleAddDog} className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white p-3 rounded-xl font-bold shadow-md transition">Save Pet</button></div>)}
             {dogs.length === 0 ? (<div className="text-center py-8 sm:py-12"><PawPrint className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-500 font-medium">No pets added yet</p><p className="text-gray-400 text-sm mt-2">Click "+ Add Pet" to get started</p></div>) : (<div className="space-y-3">{dogs.map(dog => { const vaxStatus = getDogVaxStatus(dog.id); return (<div key={dog.id} className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${selectedDog?.id === dog.id ? 'border-red-600 bg-gradient-to-br from-red-50 to-orange-50 shadow-lg' : 'border-gray-200 bg-white shadow-md'}`}><button onClick={() => { setSelectedDog(selectedDog?.id === dog.id ? null : dog); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); }} className="w-full text-left"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 sm:w-12 h-10 sm:h-12 rounded-full flex items-center justify-center ${selectedDog?.id === dog.id ? 'bg-red-600' : 'bg-gray-200'}`}><Dog className={selectedDog?.id === dog.id ? 'text-white' : 'text-gray-500'} size={20} /></div><div><div className="font-bold text-base sm:text-lg text-gray-900">{dog.name}</div><div className="text-sm text-gray-600">{dog.breed}</div></div></div>{selectedDog?.id === dog.id && (<CheckCircle2 className="text-red-600" size={24} />)}</div></button><div className="mt-3 pt-3 border-t border-gray-200"><div className="flex items-center justify-between"><div className="flex items-center gap-2">{vaxStatus.rabies ? <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full flex items-center gap-1"><Check size={12} />Rabies</span> : <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">Rabies needed</span>}</div><div className="flex items-center gap-2"><button onClick={() => handleRemoveDog(dog)} className="text-gray-400 hover:text-red-500 transition p-1" title="Remove pet"><Trash2 size={16} /></button><button onClick={() => { setVaccinationDog(dog); setShowVaccinationModal(true); }} className="text-sm text-blue-600 hover:text-blue-800 font-semibold">{vaxStatus.rabies ? 'Edit' : 'Add'} Records</button></div></div></div></div>);})}</div>)}
             {selectedDog && (<div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200"><div className="flex items-center gap-2"><CheckCircle2 className="text-green-600" size={20} /><span className="font-bold text-green-900">{selectedDog.name} selected</span></div></div>)}
+            {dogs.length > 1 && (<p className="mt-3 text-xs text-gray-500 text-center px-2">🐾 Have multiple pets? Book one at a time — you'll be able to add more pets to the same appointment after.</p>)}
           </div></div>
           
           <div className="lg:col-span-2 space-y-6">
