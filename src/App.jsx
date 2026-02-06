@@ -340,7 +340,7 @@ export default function App() {
   // Booking confirmation
   const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
   const [confirmationSlot, setConfirmationSlot] = useState(null);
-  const [smsConsent, setSmsConsent] = useState(true); // SMS opt-in checkbox
+  const [smsConsent, setSmsConsent] = useState(false); // SMS opt-in - must default OFF for A2P compliance
 
   // Booking success
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
@@ -910,7 +910,7 @@ export default function App() {
       setShowBookingSuccess(true);
       
       await loadUserData(user.id);
-      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(true);
+      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(false);
     } catch (error) { alert(error.message); }
   };
 
@@ -1323,13 +1323,15 @@ export default function App() {
                 type="checkbox" 
                 checked={smsConsent} 
                 onChange={(e) => setSmsConsent(e.target.checked)}
-                className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                className="w-5 h-5 mt-1 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
               />
               <div>
-                <span className="font-semibold text-gray-900">Text me updates about this appointment</span>
+                <span className="font-semibold text-gray-900">I agree to receive SMS text messages from Carter's Pet Market</span>
                 <p className="text-xs text-gray-500 mt-1">
-                  Receive confirmation & pickup notifications. Msg & data rates may apply. Reply STOP to unsubscribe. 
-                  <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">Privacy Policy</a>
+                  By checking this box, you consent to receive automated appointment confirmation and ready-for-pickup text messages from Carter's Pet Market at the phone number on your account. Message frequency varies (typically 2 messages per booking). Msg & data rates may apply. Reply STOP to opt out at any time. Reply HELP for help. 
+                  <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Privacy Policy</a>
+                  {' · '}
+                  <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Terms & Conditions</a>
                 </p>
               </div>
             </label>
