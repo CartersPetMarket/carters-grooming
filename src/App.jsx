@@ -32,11 +32,11 @@ const isValidEmail = (email) => {
 const sanitizeNotes = (str) => sanitize(str, 1000);
 
 // Sanitize name (letters, spaces, hyphens, apostrophes only)
-// Sanitize name - more permissive, allows unicode letters
+// Sanitize name - strips HTML, keeps letters/spaces/common punctuation
 const sanitizeName = (str) => {
   if (!str || typeof str !== 'string') return '';
-  // Remove HTML tags, then allow letters (including unicode), spaces, hyphens, apostrophes
-  return str.replace(/<[^>]*>/g, '').replace(/[^\p{L}\s\-'.]/gu, '').trim().slice(0, 100);
+  // Remove HTML tags, keep most characters but strip dangerous ones
+  return str.replace(/<[^>]*>/g, '').replace(/[<>"`;]/g, '').trim().slice(0, 100);
 };
 // ========================================================================
 
@@ -423,19 +423,28 @@ export default function App() {
       if (event === 'SIGNED_IN' && session) {
         setUser(session.user);
         
-        // Upsert customer record (handles both new and existing users safely)
+        // Create customer record if it doesn't exist
         const customerName = sanitizeName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0]) || 'Customer';
-        const customerPhone = sanitizePhone(session.user.user_metadata?.phone || '');
+        const customerPhone = session.user.user_metadata?.phone || null;
         
-        const { error: upsertError } = await supabase.from('customers').upsert({
-          id: session.user.id,
-          email: session.user.email?.toLowerCase(),
-          name: customerName,
-          phone: customerPhone
-        }, { onConflict: 'id' });
+        // Check if customer exists
+        const { data: existingCustomer } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('id', session.user.id)
+          .single();
         
-        if (upsertError) {
-          console.error('Customer upsert error:', upsertError);
+        if (!existingCustomer) {
+          // Insert new customer
+          const { error: insertError } = await supabase.from('customers').insert({
+            id: session.user.id,
+            email: session.user.email?.toLowerCase(),
+            name: customerName,
+            phone: customerPhone
+          });
+          if (insertError) {
+            console.error('Customer insert error:', insertError);
+          }
         }
         
         await loadUserData(session.user.id);
@@ -477,19 +486,28 @@ export default function App() {
       const user = data.session.user;
       setUser(user);
       
-      // Upsert customer record (handles both new and existing users safely)
+      // Create customer record if it doesn't exist
       const customerName = sanitizeName(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]) || 'Customer';
-      const customerPhone = sanitizePhone(user.user_metadata?.phone || '');
+      const customerPhone = user.user_metadata?.phone || null;
       
-      const { error: upsertError } = await supabase.from('customers').upsert({
-        id: user.id,
-        email: user.email?.toLowerCase(),
-        name: customerName,
-        phone: customerPhone
-      }, { onConflict: 'id' });
+      // Check if customer exists
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('id', user.id)
+        .single();
       
-      if (upsertError) {
-        console.error('Customer upsert error:', upsertError);
+      if (!existingCustomer) {
+        // Insert new customer
+        const { error: insertError } = await supabase.from('customers').insert({
+          id: user.id,
+          email: user.email?.toLowerCase(),
+          name: customerName,
+          phone: customerPhone
+        });
+        if (insertError) {
+          console.error('Customer insert error:', insertError);
+        }
       }
       
       await loadUserData(user.id);
@@ -715,13 +733,13 @@ export default function App() {
       
       const { data: authData, error: authError } = await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { name: cleanName, phone: cleanPhone } } });
       if (authError) throw authError;
-      const { error: customerError } = await supabase.from('customers').upsert({ 
+      const { error: customerError } = await supabase.from('customers').insert({ 
         id: authData.user.id, 
         email: cleanEmail, 
         name: cleanName, 
         phone: cleanPhone, 
         password_hash: 'handled_by_auth' 
-      }, { onConflict: 'id' });
+      });
       if (customerError) {
         if (customerError.code === '23505' && customerError.message.includes('phone')) {
           throw new Error('This phone number is already registered. Please use a different number or log in to your existing account.');
