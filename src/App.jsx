@@ -390,13 +390,23 @@ export default function App() {
       if (event === 'SIGNED_IN' && session) {
         setUser(session.user);
         
-        // Upsert customer record (handles both new and existing users safely)
-        await supabase.from('customers').upsert({
+        // Ensure customer record exists for OAuth users (insert or update)
+        const { error: custErr } = await supabase.from('customers').upsert({
           id: session.user.id,
           email: session.user.email,
           name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
           phone: session.user.user_metadata?.phone || ''
-        }, { onConflict: 'id', ignoreDuplicates: true });
+        }, { onConflict: 'id' });
+        
+        if (custErr) {
+          console.error('OAuth customer upsert failed:', custErr);
+          // Verify the record exists anyway (may have been created another way)
+          const { data: existing } = await supabase.from('customers').select('id').eq('id', session.user.id).single();
+          if (!existing) {
+            console.error('CRITICAL: No customer record for user', session.user.id);
+            alert('Account setup failed. Please try signing in again or contact support.');
+          }
+        }
         
         await loadUserData(session.user.id);
         setView('booking');
@@ -437,13 +447,21 @@ export default function App() {
       const user = data.session.user;
       setUser(user);
       
-      // Upsert customer record (handles both new and existing users safely)
-      await supabase.from('customers').upsert({
+      // Ensure customer record exists (insert or update)
+      const { error: custErr } = await supabase.from('customers').upsert({
         id: user.id,
         email: user.email,
         name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
         phone: user.user_metadata?.phone || ''
-      }, { onConflict: 'id', ignoreDuplicates: true });
+      }, { onConflict: 'id' });
+      
+      if (custErr) {
+        console.error('checkUser customer upsert failed:', custErr);
+        const { data: existing } = await supabase.from('customers').select('id').eq('id', user.id).single();
+        if (!existing) {
+          console.error('CRITICAL: No customer record for user', user.id);
+        }
+      }
       
       await loadUserData(user.id);
       setView('booking');
@@ -696,7 +714,29 @@ export default function App() {
       const breedWeight = BREED_DATABASE[newDog.breed]?.weight || 35;
       const autoSize = breedWeight <= 35 ? 'small' : 'large';
       const { data, error } = await supabase.from('dogs').insert([{ customer_id: user.id, name: newDog.name, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23503') {
+          // Foreign key violation - customer record is missing, try to create it
+          console.error('Missing customer record, attempting to create...');
+          const { error: fixErr } = await supabase.from('customers').upsert({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
+            phone: user.user_metadata?.phone || ''
+          }, { onConflict: 'id' });
+          if (!fixErr) {
+            // Retry the dog insert
+            const { data: retryData, error: retryErr } = await supabase.from('dogs').insert([{ customer_id: user.id, name: newDog.name, breed: newDog.breed, weight: breedWeight, size: autoSize }]).select();
+            if (retryErr) throw retryErr;
+            setDogs([...dogs, retryData[0]]);
+            setNewDog({ name: '', breed: '', size: 'small' });
+            setShowAddDog(false);
+            return;
+          }
+          throw new Error('Account setup issue. Please sign out and sign back in, then try again.');
+        }
+        throw error;
+      }
       setDogs([...dogs, data[0]]);
       setNewDog({ name: '', breed: '', size: 'small' });
       setShowAddDog(false);
