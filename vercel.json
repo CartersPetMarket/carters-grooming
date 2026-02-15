@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/sms-consent.html", "destination": "/sms-consent.html" },
+    { "source": "/((?!assets|.*\\.).*)", "destination": "/index.html" }
+  ]
+}
