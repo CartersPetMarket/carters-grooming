@@ -404,17 +404,16 @@ export default function App() {
           setView('booking');
           setLoading(false);
           
-          const { error: custErr } = await supabase.from('customers').upsert({
+          // Fire upsert in background - don't block data loading
+          supabase.from('customers').upsert({
             id: session.user.id,
             email: session.user.email,
             name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
             phone: session.user.user_metadata?.phone || '',
             password_hash: 'oauth_user'
-          }, { onConflict: 'id' });
-          
-          if (custErr) {
-            console.error('OAuth customer upsert failed:', custErr);
-          }
+          }, { onConflict: 'id' }).then(({ error }) => {
+            if (error) console.error('OAuth customer upsert failed:', error);
+          });
           
           await loadUserData(session.user.id);
         } catch (err) {
@@ -459,18 +458,16 @@ export default function App() {
         setView('booking');
         setLoading(false);
         
-        // Now load data in background (user already sees the app)
-        const { error: custErr } = await supabase.from('customers').upsert({
+        // Fire both in parallel - upsert shouldn't block data loading
+        supabase.from('customers').upsert({
           id: user.id,
           email: user.email,
           name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
           phone: user.user_metadata?.phone || '',
           password_hash: 'oauth_user'
-        }, { onConflict: 'id' });
-        
-        if (custErr) {
-          console.error('checkUser customer upsert failed:', custErr);
-        }
+        }, { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.error('checkUser customer upsert failed:', error);
+        });
         
         await loadUserData(user.id);
       } else {
@@ -485,49 +482,53 @@ export default function App() {
   const loadUserData = async (userId) => {
     setLoadingData(true);
     try {
-    const { data: dogsData } = await supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false);
-    setDogs(dogsData || []);
-    const { data: groomersData } = await supabase.from('groomers').select('*').eq('active', true);
-    setGroomers(groomersData || []);
-    // Load date-based schedule slots for customer booking
-    const today = new Date().toISOString().split('T')[0];
-    const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut);
-    setSchedules(slotsData || []);
-    const { data: servicesData } = await supabase.from('services').select('*');
-    setAllServices(servicesData || []);
-    const { data: promoData } = await supabase.from('promo_codes').select('*').eq('active', true);
-    setPromoCodes(promoData || []);
-    const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
-    setBookings(bookingsData || []);
-    // Load ALL bookings for capacity checking (minimal fields, non-canceled only)
-    const { data: capacityBookings } = await supabase
-      .from('bookings')
-      .select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)')
-      .gte('appointment_date', today)
-      .lte('appointment_date', twoMonthsOut)
-      .not('status', 'in', '("canceled","no_show")');
-    setAllBookings(capacityBookings || []);
-    // Load past completed bookings
-    const { data: pastData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', new Date().toISOString().split('T')[0]).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10);
-    setPastBookings(pastData || []);
-    // Load vaccinations from database
-    const { data: vaxData } = await supabase.from('pet_vaccinations').select('*').eq('customer_id', userId);
-    const vaxMap = {};
-    (vaxData || []).forEach(v => {
-      vaxMap[v.dog_id] = {
-        rabies: !!v.rabies_status,
-        rabiesMethod: v.rabies_status,
-        rabiesFile: v.rabies_file,
-        dhpp: !!v.dhpp_status,
-        dhppMethod: v.dhpp_status,
-        dhppFile: v.dhpp_file,
-        bordetella: !!v.bordetella_status,
-        bordetellaMethod: v.bordetella_status,
-        bordetellaFile: v.bordetella_file
-      };
-    });
-    setPetVaccinations(vaxMap);
+      const today = new Date().toISOString().split('T')[0];
+      const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      // Core queries - run in parallel for speed
+      const [dogsRes, groomersRes, slotsRes, servicesRes, bookingsRes, capacityRes, pastRes, vaxRes] = await Promise.all([
+        supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false),
+        supabase.from('groomers').select('*').eq('active', true),
+        supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut),
+        supabase.from('services').select('*'),
+        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }),
+        supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'),
+        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10),
+        supabase.from('pet_vaccinations').select('*').eq('customer_id', userId)
+      ]);
+
+      setDogs(dogsRes.data || []);
+      setGroomers(groomersRes.data || []);
+      setSchedules(slotsRes.data || []);
+      setAllServices(servicesRes.data || []);
+      setBookings(bookingsRes.data || []);
+      setAllBookings(capacityRes.data || []);
+      setPastBookings(pastRes.data || []);
+
+      const vaxMap = {};
+      (vaxRes.data || []).forEach(v => {
+        vaxMap[v.dog_id] = {
+          rabies: !!v.rabies_status,
+          rabiesMethod: v.rabies_status,
+          rabiesFile: v.rabies_file,
+          dhpp: !!v.dhpp_status,
+          dhppMethod: v.dhpp_status,
+          dhppFile: v.dhpp_file,
+          bordetella: !!v.bordetella_status,
+          bordetellaMethod: v.bordetella_status,
+          bordetellaFile: v.bordetella_file
+        };
+      });
+      setPetVaccinations(vaxMap);
+
+      // Promo codes - separate so it can't break anything if table doesn't exist
+      try {
+        const { data: promoData } = await supabase.from('promo_codes').select('*').eq('active', true);
+        setPromoCodes(promoData || []);
+      } catch (e) {
+        console.warn('Promo codes not available:', e);
+        setPromoCodes([]);
+      }
     } catch (err) {
       console.error('loadUserData error:', err);
     } finally {
@@ -727,7 +728,7 @@ export default function App() {
     } catch (error) { alert(error.message); }
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setView('landing'); setPetVaccinations({}); };
+  const handleLogout = async () => { try { await supabase.auth.signOut(); } catch(e) { console.error('Logout error:', e); } setUser(null); setDogs([]); setBookings([]); setPastBookings([]); setGroomers([]); setSchedules([]); setAllServices([]); setPromoCodes([]); setPetVaccinations({}); setView('landing'); };
 
   const handleAddDog = async () => {
     if (!newDog.name || !newDog.breed) { alert('Please fill in dog name and breed'); return; }
