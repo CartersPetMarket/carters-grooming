@@ -341,6 +341,9 @@ export default function App() {
   const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
   const [confirmationSlot, setConfirmationSlot] = useState(null);
   const [smsConsent, setSmsConsent] = useState(false); // SMS opt-in - must default OFF for A2P compliance
+  const [promoCode, setPromoCode] = useState('');
+  const [promoValidated, setPromoValidated] = useState(null); // null = not checked, object = valid, false = invalid
+  const [promoCodes, setPromoCodes] = useState([]);
 
   // Booking success
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
@@ -493,6 +496,8 @@ export default function App() {
     setSchedules(slotsData || []);
     const { data: servicesData } = await supabase.from('services').select('*');
     setAllServices(servicesData || []);
+    const { data: promoData } = await supabase.from('promo_codes').select('*').eq('active', true);
+    setPromoCodes(promoData || []);
     const { data: bookingsData } = await supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
     setBookings(bookingsData || []);
     // Load ALL bookings for capacity checking (minimal fields, non-canceled only)
@@ -874,7 +879,8 @@ export default function App() {
       const vaxNotes = `Rabies: ${vax.rabiesMethod === 'upload' ? 'Uploaded' : 'Bringing physical copy'}`;
       const addOnNotes = selectedAddOns.length > 0 ? 'Add-ons: ' + selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' : '';
       const specialNotes = hasSpecialNeeds && bookingNotes ? '⚠️ SPECIAL NEEDS: ' + bookingNotes + ' | ' : '';
-      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent }]);
+      const promoNotes = promoValidated ? '🏷️ PROMO: ' + promoValidated.code + ' (' + promoValidated.description + ') | ' : '';
+      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: promoNotes + specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent }]);
       if (error) throw error;
       
       // Send confirmation notification ONLY if customer opted in
@@ -902,7 +908,8 @@ export default function App() {
         time: slot.time,
         groomer: slot.groomer,
         addOns: selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean),
-        addOnIds: [...selectedAddOns]
+        addOnIds: [...selectedAddOns],
+        promo: promoValidated || null
       });
       
       setShowBookingConfirmation(false);
@@ -910,7 +917,7 @@ export default function App() {
       setShowBookingSuccess(true);
       
       await loadUserData(user.id);
-      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(false);
+      setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(false); setPromoCode(''); setPromoValidated(null);
     } catch (error) { alert(error.message); }
   };
 
@@ -989,6 +996,16 @@ export default function App() {
   const getAddOnsTotal = () => selectedAddOns.reduce((total, id) => { const addon = ADD_ON_SERVICES.find(s => s.id === id); return total + (addon ? addon.price : 0); }, 0);
   const toggleAddOn = (id) => { if (selectedAddOns.includes(id)) { setSelectedAddOns(selectedAddOns.filter(a => a !== id)); } else { setSelectedAddOns([...selectedAddOns, id]); } };
   const toggleFdAddOn = (id) => { if (fdSelectedAddOns.includes(id)) { setFdSelectedAddOns(fdSelectedAddOns.filter(a => a !== id)); } else { setFdSelectedAddOns([...fdSelectedAddOns, id]); } };
+  
+  const validatePromoCode = () => {
+    if (!promoCode.trim()) { setPromoValidated(null); return; }
+    const match = promoCodes.find(p => p.code.toUpperCase() === promoCode.trim().toUpperCase());
+    if (match) {
+      setPromoValidated(match);
+    } else {
+      setPromoValidated(false);
+    }
+  };
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
   // Activity Log function
@@ -1316,6 +1333,40 @@ export default function App() {
           
           <p className="text-xs text-gray-400 italic text-center mb-4">*Price is an estimate. Final price may vary based on coat condition.</p>
           
+          {/* Promo Code */}
+          <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <p className="font-semibold text-gray-900 text-sm mb-2">🏷️ Have a promo code?</p>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={promoCode} 
+                onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoValidated(null); }}
+                placeholder="Enter code"
+                className="flex-1 p-2 border-2 border-gray-300 rounded-lg text-sm font-semibold uppercase tracking-wider focus:ring-2 focus:ring-red-200 focus:border-red-500"
+              />
+              <button 
+                onClick={validatePromoCode}
+                disabled={!promoCode.trim()}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition ${promoCode.trim() ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+              >
+                Apply
+              </button>
+            </div>
+            {promoValidated === false && (
+              <p className="mt-2 text-sm text-red-600 font-semibold">✕ Invalid promo code</p>
+            )}
+            {promoValidated && promoValidated.code && (
+              <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-green-800">✓ {promoValidated.code}</p>
+                  <p className="text-xs text-green-600">{promoValidated.description}</p>
+                </div>
+                <button onClick={() => { setPromoCode(''); setPromoValidated(null); }} className="text-xs text-gray-400 hover:text-red-500">Remove</button>
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-2">Discount will be applied at checkout by our staff.</p>
+          </div>
+          
           {/* SMS Consent Checkbox - Required for Twilio A2P compliance */}
           <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-200">
             <label className="flex items-start gap-3 cursor-pointer">
@@ -1328,7 +1379,7 @@ export default function App() {
               <div>
                 <span className="font-semibold text-gray-900">I agree to receive SMS text messages from Carter's Pet Market</span>
                 <p className="text-xs text-gray-500 mt-1">
-                  By checking this box, you consent to receive automated appointment confirmation and ready-for-pickup text messages from Carter's Pet Market at the phone number on your account. Message frequency varies (typically 2 messages per booking). Msg & data rates may apply. Reply STOP to opt out at any time. Reply HELP for help. 
+                  By checking this box, you consent to receive automated appointment confirmation and ready-for-pickup text messages from Carter's Pet Market at the phone number on your account. Message frequency varies (typically 2 messages per booking). Msg & data rates may apply. Reply STOP to opt out at any time. Reply HELP for help. Your phone number will never be sold or shared with third parties. 
                   <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Privacy Policy</a>
                   {' · '}
                   <a href="https://cpm0.goodbarber.app/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Terms & Conditions</a>
@@ -1412,6 +1463,18 @@ export default function App() {
                       <span key={idx} className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">{addon}</span>
                     ))}
                   </div>
+                </div>
+              )}
+              {completedBooking.promo && (
+                <div className="pt-3 border-t border-green-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🏷️</span>
+                    <div>
+                      <span className="font-bold text-yellow-800">{completedBooking.promo.code}</span>
+                      <span className="text-sm text-yellow-700 ml-2">{completedBooking.promo.description}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Discount will be applied at checkout.</p>
                 </div>
               )}
             </div>
@@ -2674,6 +2737,12 @@ export default function App() {
                               <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">🐕 + Add Groomer Notes</button>
                             )}
                           </div>
+                          {booking.notes && booking.notes.includes('🏷️ PROMO:') && (
+                            <div className="mt-2 px-3 py-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg flex items-center gap-2">
+                              <span className="text-lg">🏷️</span>
+                              <span className="text-sm font-bold text-yellow-900">{booking.notes.match(/🏷️ PROMO: ([^|]+)/)?.[1]?.trim() || 'Promo Applied'}</span>
+                            </div>
+                          )}
                           {booking.notes && <p className="text-gray-500 text-xs sm:text-sm mt-2 bg-yellow-50 p-2 rounded-lg">📝 {booking.notes}</p>}
                           
                           {/* Booking notes edit - desktop only */}
