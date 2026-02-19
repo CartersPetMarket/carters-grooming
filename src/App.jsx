@@ -387,38 +387,50 @@ export default function App() {
       window.location.hash = '';
     }
     
-    // Safety net: force loading off if getSession itself hangs
+    // Safety net: force loading off after 6 seconds no matter what
     const loadingTimeout = setTimeout(() => {
       setLoading(false);
-    }, 5000);
+      setLoadingData(false);
+    }, 6000);
     
-    let userHandled = false;
+    let dataLoading = false;
     
-    checkUser().then(() => { userHandled = true; });
-    
-    // Listen for auth state changes (handles OAuth redirect)
+    // Use onAuthStateChange as the SINGLE source of truth
+    // INITIAL_SESSION fires on page load once client is fully ready
+    // SIGNED_IN fires on login/OAuth redirect
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN') && session && !userHandled) {
-        try {
-          setUser(session.user);
-          setView('booking');
-          setLoading(false);
+      console.log('Auth event:', event, !!session);
+      
+      if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        setUser(session.user);
+        setView('booking');
+        setLoading(false);
+        
+        // Only load data once per session restoration
+        if (!dataLoading) {
+          dataLoading = true;
           
-          // Fire upsert in background - don't block data loading
+          // Fire upsert in background
           supabase.from('customers').upsert({
             id: session.user.id,
             email: session.user.email,
             name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
             phone: session.user.user_metadata?.phone || '',
             password_hash: 'oauth_user'
-          }, { onConflict: 'id' }).then(({ error }) => {
-            if (error) console.error('OAuth customer upsert failed:', error);
+          }, { onConflict: 'id' }).then(({ error: e }) => {
+            if (e) console.error('Customer upsert failed:', e);
           });
           
           await loadUserData(session.user.id);
-        } catch (err) {
-          console.error('Auth state change error:', err);
+          dataLoading = false;
         }
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        // No session on page load - show landing
+        setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setView('landing');
+        setLoading(false);
       }
     });
     
@@ -449,35 +461,7 @@ export default function App() {
     }
   };
 
-  const checkUser = async () => {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        const user = data.session.user;
-        setUser(user);
-        setView('booking');
-        setLoading(false);
-        
-        // Fire both in parallel - upsert shouldn't block data loading
-        supabase.from('customers').upsert({
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
-          phone: user.user_metadata?.phone || '',
-          password_hash: 'oauth_user'
-        }, { onConflict: 'id' }).then(({ error }) => {
-          if (error) console.error('checkUser customer upsert failed:', error);
-        });
-        
-        await loadUserData(user.id);
-      } else {
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error('checkUser error:', err);
-      setLoading(false);
-    }
-  };
+
 
   const loadUserData = async (userId) => {
     setLoadingData(true);
@@ -740,7 +724,7 @@ export default function App() {
     } catch (error) { alert(error.message); }
   };
 
-  const handleLogout = async () => { try { await supabase.auth.signOut(); } catch(e) { console.error('Logout error:', e); } setUser(null); setDogs([]); setBookings([]); setPastBookings([]); setGroomers([]); setSchedules([]); setAllServices([]); setPromoCodes([]); setPetVaccinations({}); setView('landing'); };
+  const handleLogout = async () => { try { await Promise.race([supabase.auth.signOut(), new Promise(r => setTimeout(r, 3000))]); } catch(e) { console.error('Logout error:', e); } setUser(null); setDogs([]); setBookings([]); setPastBookings([]); setGroomers([]); setSchedules([]); setAllServices([]); setPromoCodes([]); setPetVaccinations({}); setView('landing'); };
 
   const handleAddDog = async () => {
     if (!newDog.name || !newDog.breed) { alert('Please fill in dog name and breed'); return; }
