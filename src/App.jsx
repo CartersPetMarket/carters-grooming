@@ -368,6 +368,7 @@ export default function App() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // STEP 1: Auth listener - only sets user state, NO data loading here
   useEffect(() => { 
     // Check if this is a password reset link FIRST
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -393,42 +394,25 @@ export default function App() {
       setLoadingData(false);
     }, 6000);
     
-    let dataLoading = false;
-    
-    // Use onAuthStateChange as the SINGLE source of truth
-    // INITIAL_SESSION fires on page load once client is fully ready
-    // SIGNED_IN fires on login/OAuth redirect
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth event:', event, !!session);
       
       if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
         setUser(session.user);
         setView('booking');
         setLoading(false);
-        
-        // Only load data once per session restoration
-        if (!dataLoading) {
-          dataLoading = true;
-          
-          // Fire upsert in background
-          supabase.from('customers').upsert({
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Customer',
-            phone: session.user.user_metadata?.phone || '',
-            password_hash: 'oauth_user'
-          }, { onConflict: 'id' }).then(({ error: e }) => {
-            if (e) console.error('Customer upsert failed:', e);
-          });
-          
-          await loadUserData(session.user.id);
-          dataLoading = false;
-        }
       } else if (event === 'INITIAL_SESSION' && !session) {
-        // No session on page load - show landing
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setDogs([]);
+        setBookings([]);
+        setPastBookings([]);
+        setGroomers([]);
+        setSchedules([]);
+        setAllServices([]);
+        setPromoCodes([]);
+        setPetVaccinations({});
         setView('landing');
         setLoading(false);
       }
@@ -436,6 +420,26 @@ export default function App() {
     
     return () => { subscription.unsubscribe(); clearTimeout(loadingTimeout); };
   }, []);
+
+  // STEP 2: When user changes, load their data (separate from auth callback)
+  useEffect(() => {
+    if (!user) return;
+    
+    console.log('User set, loading data for:', user.id);
+    
+    // Upsert customer in background
+    supabase.from('customers').upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Customer',
+      phone: user.user_metadata?.phone || '',
+      password_hash: 'oauth_user'
+    }, { onConflict: 'id' }).then(({ error: e }) => {
+      if (e) console.error('Customer upsert failed:', e);
+    });
+    
+    loadUserData(user.id);
+  }, [user?.id]);
 
   const handlePasswordReset = async () => {
     if (newPassword.length < 6) {
@@ -469,28 +473,37 @@ export default function App() {
       const today = new Date().toISOString().split('T')[0];
       const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      // Wrap each query with a 8-second timeout so one slow query can't hang everything
-      const withTimeout = (promise, label) => Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), 8000))
+      // Test query first - if this fails, don't bother with the rest
+      console.log('Testing DB connection...');
+      const testResult = await Promise.race([
+        supabase.from('services').select('count'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Test query timed out')), 5000))
       ]);
+      console.log('Test query result:', testResult);
 
+      // If test query worked, run all queries
+      console.log('Loading all data...');
       const results = await Promise.allSettled([
-        withTimeout(supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false), 'dogs'),
-        withTimeout(supabase.from('groomers').select('*').eq('active', true), 'groomers'),
-        withTimeout(supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut), 'slots'),
-        withTimeout(supabase.from('services').select('*'), 'services'),
-        withTimeout(supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }), 'bookings'),
-        withTimeout(supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'), 'capacity'),
-        withTimeout(supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10), 'past'),
-        withTimeout(supabase.from('pet_vaccinations').select('*').eq('customer_id', userId), 'vaccinations')
+        supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false),
+        supabase.from('groomers').select('*').eq('active', true),
+        supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut),
+        supabase.from('services').select('*'),
+        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }),
+        supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'),
+        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10),
+        supabase.from('pet_vaccinations').select('*').eq('customer_id', userId)
       ]);
 
-      // Safely extract data from each result
+      const labels = ['dogs', 'groomers', 'slots', 'services', 'bookings', 'capacity', 'past', 'vaccinations'];
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+          console.log(`${labels[i]}: ${r.value?.data?.length || 0} rows, error:`, r.value?.error);
+        } else {
+          console.warn(`${labels[i]} FAILED:`, r.reason);
+        }
+      });
+
       const getData = (idx) => results[idx].status === 'fulfilled' ? (results[idx].value?.data || []) : [];
-      
-      // Log any failures for debugging
-      results.forEach((r, i) => { if (r.status === 'rejected') console.warn(`Query ${i} failed:`, r.reason); });
 
       setDogs(getData(0));
       setGroomers(getData(1));
@@ -724,7 +737,7 @@ export default function App() {
     } catch (error) { alert(error.message); }
   };
 
-  const handleLogout = async () => { try { await Promise.race([supabase.auth.signOut(), new Promise(r => setTimeout(r, 3000))]); } catch(e) { console.error('Logout error:', e); } setUser(null); setDogs([]); setBookings([]); setPastBookings([]); setGroomers([]); setSchedules([]); setAllServices([]); setPromoCodes([]); setPetVaccinations({}); setView('landing'); };
+  const handleLogout = async () => { try { await Promise.race([supabase.auth.signOut(), new Promise(r => setTimeout(r, 3000))]); } catch(e) { console.error('Logout error:', e); } setUser(null); setDogs([]); setBookings([]); setPastBookings([]); setGroomers([]); setSchedules([]); setAllServices([]); setPromoCodes([]); setPetVaccinations({}); setLoadingData(false); setView('landing'); };
 
   const handleAddDog = async () => {
     if (!newDog.name || !newDog.breed) { alert('Please fill in dog name and breed'); return; }
