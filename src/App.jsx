@@ -485,28 +485,40 @@ export default function App() {
       const today = new Date().toISOString().split('T')[0];
       const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      // Core queries - run in parallel for speed
-      const [dogsRes, groomersRes, slotsRes, servicesRes, bookingsRes, capacityRes, pastRes, vaxRes] = await Promise.all([
-        supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false),
-        supabase.from('groomers').select('*').eq('active', true),
-        supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut),
-        supabase.from('services').select('*'),
-        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }),
-        supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'),
-        supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10),
-        supabase.from('pet_vaccinations').select('*').eq('customer_id', userId)
+      // Wrap each query with a 8-second timeout so one slow query can't hang everything
+      const withTimeout = (promise, label) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), 8000))
       ]);
 
-      setDogs(dogsRes.data || []);
-      setGroomers(groomersRes.data || []);
-      setSchedules(slotsRes.data || []);
-      setAllServices(servicesRes.data || []);
-      setBookings(bookingsRes.data || []);
-      setAllBookings(capacityRes.data || []);
-      setPastBookings(pastRes.data || []);
+      const results = await Promise.allSettled([
+        withTimeout(supabase.from('dogs').select('*').eq('customer_id', userId).neq('active', false), 'dogs'),
+        withTimeout(supabase.from('groomers').select('*').eq('active', true), 'groomers'),
+        withTimeout(supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut), 'slots'),
+        withTimeout(supabase.from('services').select('*'), 'services'),
+        withTimeout(supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }), 'bookings'),
+        withTimeout(supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'), 'capacity'),
+        withTimeout(supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10), 'past'),
+        withTimeout(supabase.from('pet_vaccinations').select('*').eq('customer_id', userId), 'vaccinations')
+      ]);
 
+      // Safely extract data from each result
+      const getData = (idx) => results[idx].status === 'fulfilled' ? (results[idx].value?.data || []) : [];
+      
+      // Log any failures for debugging
+      results.forEach((r, i) => { if (r.status === 'rejected') console.warn(`Query ${i} failed:`, r.reason); });
+
+      setDogs(getData(0));
+      setGroomers(getData(1));
+      setSchedules(getData(2));
+      setAllServices(getData(3));
+      setBookings(getData(4));
+      setAllBookings(getData(5));
+      setPastBookings(getData(6));
+
+      const vaxData = getData(7);
       const vaxMap = {};
-      (vaxRes.data || []).forEach(v => {
+      vaxData.forEach(v => {
         vaxMap[v.dog_id] = {
           rabies: !!v.rabies_status,
           rabiesMethod: v.rabies_status,
