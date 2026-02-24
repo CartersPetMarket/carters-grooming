@@ -394,19 +394,24 @@ export default function App() {
       setLoadingData(false);
     }, 6000);
     
+    let initialLoad = true;
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, !!session);
+      console.log('Auth event:', event, !!session, 'initialLoad:', initialLoad);
       
       if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
         setUser(session.user);
-        // Only change view to booking on initial load or fresh sign-in, NOT on token refresh
-        if (event !== 'TOKEN_REFRESHED') {
+        // Only set view to booking on the very first auth event (page load or fresh sign-in)
+        if (initialLoad) {
           setView('booking');
+          initialLoad = false;
         }
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
+        initialLoad = false;
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
+        initialLoad = true; // Reset so next sign-in sets the view
         setUser(null);
         setDogs([]);
         setBookings([]);
