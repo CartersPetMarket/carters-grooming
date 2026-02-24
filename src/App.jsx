@@ -394,24 +394,15 @@ export default function App() {
       setLoadingData(false);
     }, 6000);
     
-    let initialLoad = true;
-    
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, !!session, 'initialLoad:', initialLoad);
+      console.log('Auth event:', event, !!session);
       
       if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
         setUser(session.user);
-        // Only set view to booking on the very first auth event (page load or fresh sign-in)
-        if (initialLoad) {
-          setView('booking');
-          initialLoad = false;
-        }
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
-        initialLoad = false;
         setLoading(false);
       } else if (event === 'SIGNED_OUT') {
-        initialLoad = true; // Reset so next sign-in sets the view
         setUser(null);
         setDogs([]);
         setBookings([]);
@@ -429,11 +420,15 @@ export default function App() {
     return () => { subscription.unsubscribe(); clearTimeout(loadingTimeout); };
   }, []);
 
-  // STEP 2: When user changes, load their data (separate from auth callback)
+  // STEP 2: When user changes, load their data and navigate to booking (only from landing/auth)
   useEffect(() => {
     if (!user) return;
     
     console.log('User set, loading data for:', user.id);
+    
+    // Only navigate to booking if we're on the landing or auth page
+    // This prevents admin/other views from being overridden
+    setView(prev => (prev === 'landing' || prev === 'auth') ? 'booking' : prev);
     
     // Upsert customer in background
     supabase.from('customers').upsert({
