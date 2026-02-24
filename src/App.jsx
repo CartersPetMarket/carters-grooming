@@ -399,7 +399,10 @@ export default function App() {
       
       if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
         setUser(session.user);
-        setView('booking');
+        // Only change view to booking on initial load or fresh sign-in, NOT on token refresh
+        if (event !== 'TOKEN_REFRESHED') {
+          setView('booking');
+        }
         setLoading(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
         setLoading(false);
