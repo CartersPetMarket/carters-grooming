@@ -368,6 +368,7 @@ export default function App() {
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email?.toLowerCase());
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [isInviteSetup, setIsInviteSetup] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -378,10 +379,11 @@ export default function App() {
     const accessToken = hashParams.get('access_token');
     const type = hashParams.get('type');
     
-    if (type === 'recovery' && accessToken) {
+    if ((type === 'recovery' || type === 'invite') && accessToken) {
       setShowResetPassword(true);
+      setIsInviteSetup(type === 'invite');
       setLoading(false);
-      return; // Don't check user, show reset form
+      return; // Don't check user, show reset/setup form
     }
     
     // Handle error from expired link
@@ -1830,8 +1832,8 @@ export default function App() {
         <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md border-4 border-red-600">
           <div className="text-center mb-8">
             <img src="/logo.png" alt="Carter's Pet Market" className="h-20 w-auto mx-auto mb-4" />
-            <h1 className="text-3xl font-black text-gray-900 mb-2">Reset Password</h1>
-            <p className="text-gray-600">Enter your new password below</p>
+            <h1 className="text-3xl font-black text-gray-900 mb-2">{isInviteSetup ? 'Welcome! Set Up Your Account' : 'Reset Password'}</h1>
+            <p className="text-gray-600">{isInviteSetup ? 'Create a password to access your grooming appointments' : 'Enter your new password below'}</p>
           </div>
           <div className="space-y-4">
             <input 
@@ -1852,10 +1854,10 @@ export default function App() {
               onClick={handlePasswordReset} 
               className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white p-4 rounded-xl font-bold text-lg transition shadow-lg hover:shadow-xl"
             >
-              Update Password
+              {isInviteSetup ? 'Create My Account' : 'Update Password'}
             </button>
             <button 
-              onClick={() => { setShowResetPassword(false); window.location.hash = ''; window.location.href = '/'; }} 
+              onClick={() => { setShowResetPassword(false); setIsInviteSetup(false); window.location.hash = ''; window.location.href = '/'; }} 
               className="w-full text-gray-600 hover:text-gray-800 font-semibold"
             >
               Cancel
