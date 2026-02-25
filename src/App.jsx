@@ -310,6 +310,9 @@ export default function App() {
   const [fdShowNewPet, setFdShowNewPet] = useState(false);
   const [fdNewPet, setFdNewPet] = useState({ name: '', breed: '' });
   const [fdOverrideMode, setFdOverrideMode] = useState(false);
+  const [fdCreatingCustomer, setFdCreatingCustomer] = useState(false);
+  const [fdShowVaxEntry, setFdShowVaxEntry] = useState(null); // dog ID to show vax entry for
+  const [fdVaxRabies, setFdVaxRabies] = useState(''); // 'on_file' or 'bringing'
   
   // Notification Settings
   const [twilioSettings, setTwilioSettings] = useState({ accountSid: '', authToken: '', phoneNumber: '', enabled: false });
@@ -1131,26 +1134,57 @@ export default function App() {
     setFdCustomerHistory(data || []);
   };
 
-  // Front Desk: Create new customer
+  // Front Desk: Create new customer via Edge Function (creates auth account + sends invite email)
   const createFdCustomer = async () => {
-    if (!fdNewCustomer.name || !fdNewCustomer.phone) {
-      alert('Name and phone are required');
+    if (!fdNewCustomer.name || !fdNewCustomer.phone || !fdNewCustomer.email) {
+      alert('Name, phone, and email are all required');
       return;
     }
+    setFdCreatingCustomer(true);
     try {
-      const tempId = crypto.randomUUID();
-      const { data, error } = await supabase.from('customers')
-        .insert([{ id: tempId, name: fdNewCustomer.name, phone: fdNewCustomer.phone, email: fdNewCustomer.email || null }])
-        .select();
-      if (error) throw error;
+      const response = await fetch('https://wpvoejdfvuhsrfderhpo.supabase.co/functions/v1/create-customer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g'
+        },
+        body: JSON.stringify({
+          email: fdNewCustomer.email.trim(),
+          phone: fdNewCustomer.phone.trim(),
+          name: fdNewCustomer.name.trim()
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to create customer');
+      
       await loadAllBookings();
-      setFdSelectedCustomer(data[0]);
+      setFdSelectedCustomer(result.customer);
       setFdShowNewCustomer(false);
       setFdNewCustomer({ name: '', phone: '', email: '' });
-    } catch (error) { alert(error.message); }
+      setFdShowNewPet(true); // Auto-open add pet form
+      
+      if (result.existing) {
+        // Customer already existed — no invite sent
+        console.log('Customer already existed:', result.customer.name);
+      } else {
+        // New customer — invite email sent
+        await logActivity(
+          'customer_created',
+          'customer',
+          result.customer.id,
+          `Created new customer ${result.customer.name} (${result.customer.email}) — invite email sent`,
+          { name: result.customer.name, email: result.customer.email, phone: result.customer.phone }
+        );
+      }
+    } catch (error) { 
+      alert('Error creating customer: ' + error.message); 
+    } finally {
+      setFdCreatingCustomer(false);
+    }
   };
 
-  // Front Desk: Create new pet
+  // Front Desk: Create new pet (auto-shows vaccination entry after)
   const createFdPet = async () => {
     if (!fdNewPet.name || !fdNewPet.breed || !fdSelectedCustomer) {
       alert('Pet name and breed are required');
@@ -1167,7 +1201,35 @@ export default function App() {
       setFdSelectedPets([...fdSelectedPets, data[0]]);
       setFdShowNewPet(false);
       setFdNewPet({ name: '', breed: '' });
+      // Auto-show vaccination entry for the new pet
+      setFdShowVaxEntry(data[0].id);
+      setFdVaxRabies('');
     } catch (error) { alert(error.message); }
+  };
+
+  // Front Desk: Save quick vaccination record (rabies — required for online booking)
+  const saveFdVaccination = async (dogId, rabiesStatus) => {
+    try {
+      const record = {
+        dog_id: dogId,
+        customer_id: fdSelectedCustomer.id,
+        rabies_status: rabiesStatus, // 'on_file' or 'bringing'
+        updated_at: new Date().toISOString()
+      };
+      // Check if record exists
+      const { data: existing } = await supabase.from('pet_vaccinations').select('id').eq('dog_id', dogId).single();
+      if (existing) {
+        await supabase.from('pet_vaccinations').update(record).eq('dog_id', dogId);
+      } else {
+        await supabase.from('pet_vaccinations').insert([record]);
+      }
+      setFdShowVaxEntry(null);
+      setFdVaxRabies('');
+      await loadAllBookings(); // Refresh pet data with vax status
+    } catch (error) { 
+      console.error('Vaccination save error:', error);
+      alert('Error saving vaccination: ' + error.message); 
+    }
   };
 
   // Front Desk: Initiate booking (shows PIN modal)
@@ -1628,6 +1690,8 @@ export default function App() {
       setFdBookingNotes('');
       setFdOverrideMode(false);
       setFdCustomerHistory([]);
+      setFdShowVaxEntry(null);
+      setFdVaxRabies('');
     } catch (error) { alert(error.message); }
   };
 
@@ -2434,7 +2498,7 @@ export default function App() {
             <button onClick={() => { setAdminTab('calendar'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'calendar' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">📅</span><span className="hidden sm:inline">📅 Schedule</span>
             </button>
-            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPet(null); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPets([]); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">📞</span><span className="hidden sm:inline">📞 Front Desk</span>
             </button>
             <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -3046,11 +3110,19 @@ export default function App() {
                     {fdShowNewCustomer && (
                       <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200 space-y-3">
                         <h3 className="font-bold text-gray-900">New Customer</h3>
+                        <p className="text-xs text-gray-600">An invite email will be sent so they can create their login.</p>
                         <input type="text" placeholder="Name *" value={fdNewCustomer.name} onChange={(e) => setFdNewCustomer({ ...fdNewCustomer, name: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
                         <input type="tel" placeholder="Phone *" value={fdNewCustomer.phone} onChange={(e) => setFdNewCustomer({ ...fdNewCustomer, phone: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
-                        <input type="email" placeholder="Email (optional)" value={fdNewCustomer.email} onChange={(e) => setFdNewCustomer({ ...fdNewCustomer, email: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                        <input type="email" placeholder="Email *" value={fdNewCustomer.email} onChange={(e) => setFdNewCustomer({ ...fdNewCustomer, email: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                        {fdNewCustomer.email && (
+                          <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-xs text-blue-700">📧 Invite will be sent to <span className="font-bold">{fdNewCustomer.email}</span></p>
+                          </div>
+                        )}
                         <div className="flex gap-2">
-                          <button onClick={createFdCustomer} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Create</button>
+                          <button onClick={createFdCustomer} disabled={fdCreatingCustomer || !fdNewCustomer.name || !fdNewCustomer.phone || !fdNewCustomer.email} className={`flex-1 py-3 font-bold rounded-xl transition ${fdCreatingCustomer || !fdNewCustomer.name || !fdNewCustomer.phone || !fdNewCustomer.email ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
+                            {fdCreatingCustomer ? '⏳ Creating...' : '✉️ Create & Send Invite'}
+                          </button>
                           <button onClick={() => setFdShowNewCustomer(false)} className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold">Cancel</button>
                         </div>
                       </div>
@@ -3065,7 +3137,7 @@ export default function App() {
                           <p className="text-gray-600">{fdSelectedCustomer.phone}</p>
                           {fdSelectedCustomer.email && <p className="text-gray-500 text-sm">{fdSelectedCustomer.email}</p>}
                         </div>
-                        <button onClick={() => { setFdSelectedCustomer(null); setFdSelectedPets([]); setFdCustomerHistory([]); }} className="text-red-600 hover:text-red-800 font-bold">Change</button>
+                        <button onClick={() => { setFdSelectedCustomer(null); setFdSelectedPets([]); setFdCustomerHistory([]); setFdShowVaxEntry(null); setFdVaxRabies(''); }} className="text-red-600 hover:text-red-800 font-bold">Change</button>
                       </div>
                     </div>
                     
@@ -3123,6 +3195,7 @@ export default function App() {
                     <div className="space-y-2 mb-4">
                       {fdCustomerPets.map(pet => {
                         const isSelected = fdSelectedPets.some(p => p.id === pet.id);
+                        const hasRabies = pet.vaccination?.rabies_status;
                         return (
                           <button key={pet.id} onClick={() => {
                             if (isSelected) {
@@ -3136,14 +3209,89 @@ export default function App() {
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isSelected ? 'bg-red-600' : 'bg-gray-200'}`}>
                                   {isSelected && <Check className="text-white" size={14} />}
                                 </div>
-                                <div><p className="font-bold text-gray-900">{pet.name}</p><p className="text-gray-600 text-sm">{pet.breed}</p></div>
+                                <div>
+                                  <p className="font-bold text-gray-900">{pet.name}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-gray-600 text-sm">{pet.breed}</p>
+                                    {hasRabies ? (
+                                      <span className="text-xs text-green-600 font-semibold">✓ Rabies</span>
+                                    ) : (
+                                      <span className="text-xs text-red-500 font-semibold">⚠ No rabies</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <span className={`px-2 py-1 text-xs font-bold rounded-full ${pet.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{pet.size === 'large' ? '🐕‍🦺 Large' : '🐕 Small'}</span>
+                              <div className="flex items-center gap-2">
+                                {!hasRabies && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); setFdShowVaxEntry(pet.id); setFdVaxRabies(''); }}
+                                    className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-lg font-bold hover:bg-amber-200 transition"
+                                  >
+                                    + Vax
+                                  </button>
+                                )}
+                                <span className={`px-2 py-1 text-xs font-bold rounded-full ${pet.size === 'large' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>{pet.size === 'large' ? '🐕‍🦺 Large' : '🐕 Small'}</span>
+                              </div>
                             </div>
                           </button>
                         );
                       })}
                     </div>
+
+                    {/* Inline Vaccination Quick-Entry (shows after creating a new pet) */}
+                    {fdShowVaxEntry && (() => {
+                      const vaxPet = fdSelectedPets.find(p => p.id === fdShowVaxEntry) || allPets.find(p => p.id === fdShowVaxEntry);
+                      if (!vaxPet) return null;
+                      return (
+                        <div className="p-4 bg-amber-50 rounded-xl border-2 border-amber-300 mb-4 space-y-3">
+                          <h4 className="font-bold text-amber-900 flex items-center gap-2">
+                            <AlertTriangle size={18} /> Vaccination — {vaxPet.name}
+                          </h4>
+                          <p className="text-xs text-amber-700">Rabies proof is required for booking. How is the customer providing it?</p>
+                          <div className="space-y-2">
+                            <button 
+                              onClick={() => setFdVaxRabies('on_file')}
+                              className={`w-full p-3 rounded-xl border-2 transition text-left flex items-center gap-3 ${fdVaxRabies === 'on_file' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-300 bg-white'}`}
+                            >
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${fdVaxRabies === 'on_file' ? 'bg-green-500' : 'bg-gray-200'}`}>
+                                {fdVaxRabies === 'on_file' && <Check className="text-white" size={12} />}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900 text-sm">Records on file / provided now</p>
+                                <p className="text-xs text-gray-500">Customer showed proof at front desk</p>
+                              </div>
+                            </button>
+                            <button 
+                              onClick={() => setFdVaxRabies('bringing')}
+                              className={`w-full p-3 rounded-xl border-2 transition text-left flex items-center gap-3 ${fdVaxRabies === 'bringing' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300 bg-white'}`}
+                            >
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${fdVaxRabies === 'bringing' ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                {fdVaxRabies === 'bringing' && <Check className="text-white" size={12} />}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900 text-sm">Bringing physical copy</p>
+                                <p className="text-xs text-gray-500">Customer will bring records to appointment</p>
+                              </div>
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => fdVaxRabies && saveFdVaccination(fdShowVaxEntry, fdVaxRabies)}
+                              disabled={!fdVaxRabies}
+                              className={`flex-1 py-3 font-bold rounded-xl transition ${!fdVaxRabies ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                            >
+                              ✓ Save & Continue
+                            </button>
+                            <button 
+                              onClick={() => { setFdShowVaxEntry(null); setFdVaxRabies(''); }}
+                              className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold text-sm"
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {!fdShowNewPet ? (
                       <button onClick={() => setFdShowNewPet(true)} className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:border-green-400 hover:text-green-600 font-semibold transition flex items-center justify-center gap-2"><Plus size={20} /> Add New Pet</button>
@@ -4703,3 +4851,4 @@ export default function App() {
     </div>
   );
 }
+
