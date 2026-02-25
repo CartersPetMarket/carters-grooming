@@ -3077,6 +3077,14 @@ export default function App() {
                           className="w-full pl-10 p-4 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500"
                         />
                       </div>
+                      {!fdShowNewCustomer && (
+                        <button 
+                          onClick={() => { setFdShowNewCustomer(true); setFdNewCustomer({ name: '', phone: fdPhoneSearch || '', email: '' }); }}
+                          className="w-full mt-3 py-3 border-2 border-dashed border-green-400 rounded-xl text-green-700 hover:bg-green-50 font-semibold transition flex items-center justify-center gap-2"
+                        >
+                          <UserPlus size={20} /> + New Customer
+                        </button>
+                      )}
                     </div>
 
                     {fdSearchResults.length > 0 && (
@@ -3095,15 +3103,9 @@ export default function App() {
                       </div>
                     )}
 
-                    {fdPhoneSearch.length >= 3 && fdSearchResults.length === 0 && (
-                      <div className="text-center py-8 bg-gray-50 rounded-xl mb-6">
-                        <p className="text-gray-600 mb-4">No customer found</p>
-                        <button 
-                          onClick={() => { setFdShowNewCustomer(true); setFdNewCustomer({ ...fdNewCustomer, phone: fdPhoneSearch }); }}
-                          className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition flex items-center gap-2 mx-auto"
-                        >
-                          <UserPlus size={20} /> Create New Customer
-                        </button>
+                    {fdPhoneSearch.length >= 3 && fdSearchResults.length === 0 && !fdShowNewCustomer && (
+                      <div className="text-center py-4 bg-gray-50 rounded-xl mb-6">
+                        <p className="text-gray-500 text-sm">No customer found for "{fdPhoneSearch}"</p>
                       </div>
                     )}
 
@@ -4851,4 +4853,3 @@ export default function App() {
     </div>
   );
 }
-
