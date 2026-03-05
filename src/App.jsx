@@ -898,7 +898,9 @@ export default function App() {
       const addOnNotes = selectedAddOns.length > 0 ? 'Add-ons: ' + selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' : '';
       const specialNotes = hasSpecialNeeds && bookingNotes ? '⚠️ SPECIAL NEEDS: ' + bookingNotes + ' | ' : '';
       const promoNotes = promoValidated ? '🏷️ PROMO: ' + promoValidated.code + ' (' + promoValidated.description + ') | ' : '';
-      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: promoNotes + specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent }]);
+      const addOnNames = selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean);
+      const addOnsTotal = selectedAddOns.reduce((t, id) => { const s = ADD_ON_SERVICES.find(a => a.id === id); return t + (s?.price || 0); }, 0);
+      const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: promoNotes + specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent, add_ons: selectedAddOns, add_on_names: addOnNames, add_ons_total: addOnsTotal }]);
       if (error) throw error;
       
       // Send confirmation notification ONLY if customer opted in
@@ -1637,7 +1639,10 @@ export default function App() {
           appointment_time: slot.time,
           status: 'scheduled',
           created_by_staff_id: staffMember?.id || null,
-          created_by_staff_name: staffMember?.name || null
+          created_by_staff_name: staffMember?.name || null,
+          add_ons: fdSelectedAddOns,
+          add_on_names: addOnNames,
+          add_ons_total: fdSelectedAddOns.reduce((t, id) => { const s = ADD_ON_SERVICES.find(a => a.id === id); return t + (s?.price || 0); }, 0)
         };
         
         // Try with notes first, fall back to without if column doesn't exist
