@@ -1701,6 +1701,7 @@ export default function App() {
       setFdBookingConfirmation({
         customerName: fdSelectedCustomer.name,
         customerPhone: fdSelectedCustomer.phone,
+        customerEmail: fdSelectedCustomer.email,
         pets: fdSelectedPets.map(p => ({ name: p.name, breed: p.breed })),
         service: serviceName,
         addOns: addOnNames,
@@ -2209,9 +2210,9 @@ export default function App() {
                   </div>
                 </div>
                 
-                {fdBookingConfirmation.customerPhone && (
+                {fdBookingConfirmation.customerEmail && (
                   <p className="text-center text-sm text-green-600 font-semibold mb-4">
-                    📱 Confirmation text sent to {fdBookingConfirmation.customerPhone}
+                    📧 Confirmation email sent to {fdBookingConfirmation.customerEmail}
                   </p>
                 )}
                 
