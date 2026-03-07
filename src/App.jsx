@@ -916,6 +916,17 @@ export default function App() {
         }
       }
       
+      // Always send confirmation email
+      const addOnNamesList = selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean);
+      sendEmailNotification('confirmation', {
+        dogName: selectedDog.name,
+        service: allServices.find(s => s.id === selectedService)?.name || 'Grooming',
+        date: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+        time: slot.time,
+        groomer: slot.groomer,
+        addOns: addOnNamesList.length > 0 ? addOnNamesList.join(', ') : null
+      }, user.email);
+      
       // Store completed booking details for success screen
       const serviceName = allServices.find(s => s.id === selectedService)?.name || 'Service';
       setCompletedBooking({
@@ -1662,7 +1673,7 @@ export default function App() {
         );
       }
       
-      // Send confirmation notification
+      // Send confirmation notification (SMS)
       if (fdSelectedCustomer.phone) {
         const petNames = fdSelectedPets.map(p => p.name).join(' & ');
         sendNotification('confirmation', {
@@ -1671,6 +1682,19 @@ export default function App() {
           time: slot.time,
           groomer: slot.groomer
         }, fdSelectedCustomer.phone);
+      }
+      
+      // Send confirmation email
+      if (fdSelectedCustomer.email) {
+        const petNames = fdSelectedPets.map(p => p.name).join(' & ');
+        sendEmailNotification('confirmation', {
+          dogName: petNames,
+          service: serviceName,
+          date: new Date(fdSelectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+          time: slot.time,
+          groomer: slot.groomer,
+          addOns: addOnNames.length > 0 ? addOnNames.join(', ') : null
+        }, fdSelectedCustomer.email);
       }
       
       // Build confirmation data
@@ -1744,6 +1768,30 @@ export default function App() {
     }
   };
 
+  // Send email notification via Resend Edge Function
+  const sendEmailNotification = async (type, data, customerEmail) => {
+    if (!customerEmail) {
+      console.log('📧 No email address — skipping email');
+      return;
+    }
+    console.log('📧 Sending email:', type, customerEmail);
+    try {
+      const response = await fetch('https://wpvoejdfvuhsrfderhpo.supabase.co/functions/v1/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g'
+        },
+        body: JSON.stringify({ to: customerEmail, type, data })
+      });
+      const result = await response.json();
+      console.log('📧 Email response:', response.status, result);
+    } catch (error) {
+      console.error('📧 Email error:', error);
+    }
+  };
+
   // Update booking status
   const updateBookingStatus = async (bookingId, newStatus, booking) => {
     try {
@@ -1759,7 +1807,7 @@ export default function App() {
         { petName: booking?.dogs?.name, customerName: booking?.customers?.name, oldStatus, newStatus, date: booking?.appointment_date }
       );
       
-      // Send completion notification (only if customer opted in)
+      // Send completion notification (only if customer opted in for SMS)
       if (newStatus === 'completed' && booking && booking.sms_consent !== false) {
         await sendNotification('completion', {
           dogName: booking.dogs?.name,
@@ -1767,6 +1815,15 @@ export default function App() {
           time: booking.appointment_time,
           groomer: booking.groomers?.name
         }, booking.customers?.phone);
+      }
+      
+      // Always send completion email
+      if (newStatus === 'completed' && booking?.customers?.email) {
+        sendEmailNotification('completion', {
+          dogName: booking.dogs?.name,
+          service: booking.services?.name || 'Grooming',
+          groomer: booking.groomers?.name
+        }, booking.customers.email);
       }
       
       await loadAllBookings();
