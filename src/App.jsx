@@ -969,7 +969,7 @@ export default function App() {
     if (!confirmed) return;
     
     try {
-      const { error } = await supabase.from('bookings').update({ status: 'canceled' }).eq('id', booking.id);
+      const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id);
       if (error) throw error;
       await loadUserData(user.id);
       alert('Appointment canceled successfully.');
@@ -1886,7 +1886,7 @@ export default function App() {
     }
   };
 
-  const getBookingsForDate = (date) => allBookings.filter(b => b.appointment_date === date && b.status !== 'canceled' && b.status !== 'no_show');
+  const getBookingsForDate = (date) => allBookings.filter(b => b.appointment_date === date && b.status !== 'cancelled' && b.status !== 'no_show');
 
   // Password Reset Page - check FIRST before anything else
   if (showResetPassword) {
@@ -2106,7 +2106,7 @@ export default function App() {
 
     const getTodayBookings = () => {
       const today = new Date().toISOString().split('T')[0];
-      return allBookings.filter(b => b.appointment_date === today && b.status !== 'canceled' && b.status !== 'no_show').sort((a, b) => {
+      return allBookings.filter(b => b.appointment_date === today && b.status !== 'cancelled' && b.status !== 'no_show').sort((a, b) => {
         const getMinutes = (time) => { const [t, period] = time.split(' '); let [h, m] = t.split(':').map(Number); if (period === 'PM' && h !== 12) h += 12; if (period === 'AM' && h === 12) h = 0; return h * 60 + (m || 0); };
         return getMinutes(a.appointment_time) - getMinutes(b.appointment_time);
       });
