@@ -254,6 +254,12 @@ export default function App() {
   const [petHistory, setPetHistory] = useState([]);
   const [editingPetNotes, setEditingPetNotes] = useState(false);
   const [petNotesText, setPetNotesText] = useState('');
+  const [editingCustomerInfo, setEditingCustomerInfo] = useState(false);
+  const [editCustomerData, setEditCustomerData] = useState({ name: '', phone: '', email: '' });
+  const [editingPetInfo, setEditingPetInfo] = useState(false);
+  const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
+  const [adminShowAddDog, setAdminShowAddDog] = useState(false);
+  const [adminNewDog, setAdminNewDog] = useState({ name: '', breed: '' });
   const [editingGroomerNotes, setEditingGroomerNotes] = useState(null);
   const [groomerNotesText, setGroomerNotesText] = useState('');
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
@@ -2080,6 +2086,79 @@ export default function App() {
       setSelectedPet({ ...selectedPet, notes: petNotesText });
     };
 
+    // Admin: Update customer info
+    const saveCustomerInfo = async (customerId) => {
+      if (!editCustomerData.name || !editCustomerData.phone || !editCustomerData.email) {
+        alert('Name, phone, and email are all required');
+        return;
+      }
+      try {
+        const { error } = await supabase.from('customers').update({
+          name: editCustomerData.name.trim(),
+          phone: editCustomerData.phone.trim(),
+          email: editCustomerData.email.trim()
+        }).eq('id', customerId);
+        if (error) throw error;
+        await loadAllBookings();
+        setSelectedCustomer({ ...selectedCustomer, ...editCustomerData });
+        setEditingCustomerInfo(false);
+        await logActivity('customer_updated', 'customer', customerId, 
+          `Updated customer info for ${editCustomerData.name}`,
+          { name: editCustomerData.name, phone: editCustomerData.phone, email: editCustomerData.email }
+        );
+      } catch (error) { alert('Error updating customer: ' + error.message); }
+    };
+
+    // Admin: Update pet info (name, breed — recalculates size)
+    const savePetInfo = async (dogId) => {
+      if (!editPetData.name || !editPetData.breed) {
+        alert('Pet name and breed are required');
+        return;
+      }
+      try {
+        const breedInfo = BREED_DATABASE[editPetData.breed];
+        const newSize = breedInfo && breedInfo.weight > 35 ? 'large' : 'small';
+        const { error } = await supabase.from('dogs').update({
+          name: editPetData.name.trim(),
+          breed: editPetData.breed,
+          size: newSize,
+          weight: breedInfo?.weight || null
+        }).eq('id', dogId);
+        if (error) throw error;
+        await loadAllBookings();
+        const updatedPet = { ...selectedPet, name: editPetData.name.trim(), breed: editPetData.breed, size: newSize };
+        setSelectedPet(updatedPet);
+        setEditingPetInfo(false);
+        await logActivity('pet_updated', 'dog', dogId,
+          `Updated pet info: ${editPetData.name} (${editPetData.breed})`,
+          { name: editPetData.name, breed: editPetData.breed, size: newSize }
+        );
+      } catch (error) { alert('Error updating pet: ' + error.message); }
+    };
+
+    // Admin: Add new dog to existing customer
+    const adminAddDog = async (customerId) => {
+      if (!adminNewDog.name || !adminNewDog.breed) {
+        alert('Pet name and breed are required');
+        return;
+      }
+      try {
+        const breedInfo = BREED_DATABASE[adminNewDog.breed];
+        const size = breedInfo && breedInfo.weight > 35 ? 'large' : 'small';
+        const { data, error } = await supabase.from('dogs')
+          .insert([{ customer_id: customerId, name: adminNewDog.name.trim(), breed: adminNewDog.breed, size, weight: breedInfo?.weight || null }])
+          .select();
+        if (error) throw error;
+        await loadAllBookings();
+        setAdminShowAddDog(false);
+        setAdminNewDog({ name: '', breed: '' });
+        await logActivity('pet_added', 'dog', data[0].id,
+          `Added pet ${adminNewDog.name} (${adminNewDog.breed}) to ${selectedCustomer.name}`,
+          { petName: adminNewDog.name, breed: adminNewDog.breed, customerName: selectedCustomer.name }
+        );
+      } catch (error) { alert('Error adding pet: ' + error.message); }
+    };
+
     const saveGroomerNotesFromCard = async (dogId) => {
       await supabase.from('dogs').update({ notes: groomerNotesText }).eq('id', dogId);
       await loadAllBookings();
@@ -2569,7 +2648,7 @@ export default function App() {
             <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPets([]); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">📞</span><span className="hidden sm:inline">📞 Front Desk</span>
             </button>
-            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); setEditingCustomerInfo(false); setEditingPetInfo(false); setAdminShowAddDog(false); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">👤</span><span className="hidden sm:inline">👤 Customers</span>
             </button>
             <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -3531,17 +3610,72 @@ export default function App() {
           {/* CUSTOMER DETAIL VIEW */}
           {adminTab === 'customers' && selectedCustomer && !selectedPet && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <button onClick={() => setSelectedCustomer(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
+              <button onClick={() => { setSelectedCustomer(null); setEditingCustomerInfo(false); setAdminShowAddDog(false); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
                 <ChevronLeft size={20} /> Back to Customers
               </button>
               
               <div className="mb-8">
-                <h2 className="text-3xl font-black text-gray-900">{selectedCustomer.name}</h2>
-                <p className="text-lg text-gray-600 mt-2">📞 {selectedCustomer.phone}</p>
-                <p className="text-lg text-gray-600">✉️ {selectedCustomer.email}</p>
+                {editingCustomerInfo ? (
+                  <div className="p-4 bg-blue-50 rounded-xl border-2 border-blue-200 space-y-3">
+                    <h3 className="font-bold text-gray-900">Edit Customer</h3>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Name</label>
+                      <input type="text" value={editCustomerData.name} onChange={(e) => setEditCustomerData({ ...editCustomerData, name: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Phone</label>
+                      <input type="tel" value={editCustomerData.phone} onChange={(e) => setEditCustomerData({ ...editCustomerData, phone: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Email</label>
+                      <input type="email" value={editCustomerData.email} onChange={(e) => setEditCustomerData({ ...editCustomerData, email: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => saveCustomerInfo(selectedCustomer.id)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Save Changes</button>
+                      <button onClick={() => setEditingCustomerInfo(false)} className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-3xl font-black text-gray-900">{selectedCustomer.name}</h2>
+                      <p className="text-lg text-gray-600 mt-2">📞 {selectedCustomer.phone}</p>
+                      <p className="text-lg text-gray-600">✉️ {selectedCustomer.email}</p>
+                    </div>
+                    <button onClick={() => { setEditingCustomerInfo(true); setEditCustomerData({ name: selectedCustomer.name || '', phone: selectedCustomer.phone || '', email: selectedCustomer.email || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
+                      ✏️ Edit
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Pets</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Pets</h3>
+                {!adminShowAddDog && (
+                  <button onClick={() => setAdminShowAddDog(true)} className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 font-bold rounded-xl transition flex items-center gap-2">
+                    <Plus size={18} /> Add Pet
+                  </button>
+                )}
+              </div>
+
+              {adminShowAddDog && (
+                <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200 space-y-3 mb-4">
+                  <h4 className="font-bold text-gray-900">New Pet for {selectedCustomer.name}</h4>
+                  <input type="text" placeholder="Pet Name *" value={adminNewDog.name} onChange={(e) => setAdminNewDog({ ...adminNewDog, name: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                  <select value={adminNewDog.breed} onChange={(e) => setAdminNewDog({ ...adminNewDog, breed: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl">
+                    <option value="">Select Breed *</option>
+                    {Object.keys(BREED_DATABASE).filter(b => !b.startsWith('Mixed')).sort().map(breed => (<option key={breed} value={breed}>{breed}</option>))}
+                    <option disabled>──────────</option>
+                    {Object.keys(BREED_DATABASE).filter(b => b.startsWith('Mixed')).map(breed => (<option key={breed} value={breed}>{breed}</option>))}
+                  </select>
+                  {adminNewDog.breed && (<div className={`p-2 rounded-lg text-center text-sm font-semibold ${BREED_DATABASE[adminNewDog.breed]?.weight <= 35 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{BREED_DATABASE[adminNewDog.breed]?.weight <= 35 ? '🐕 Small Dog' : '🐕‍🦺 Large Dog'}</div>)}
+                  <div className="flex gap-2">
+                    <button onClick={() => adminAddDog(selectedCustomer.id)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Add Pet</button>
+                    <button onClick={() => { setAdminShowAddDog(false); setAdminNewDog({ name: '', breed: '' }); }} className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold">Cancel</button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 {customerPets.map(pet => (
                   <button 
@@ -3578,7 +3712,7 @@ export default function App() {
           {/* PET DETAIL VIEW */}
           {adminTab === 'customers' && selectedPet && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <button onClick={() => setSelectedPet(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
+              <button onClick={() => { setSelectedPet(null); setEditingPetInfo(false); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
                 <ChevronLeft size={20} /> Back to {selectedCustomer?.name}
               </button>
               
@@ -3586,11 +3720,40 @@ export default function App() {
                 <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center">
                   <Dog className="text-red-600" size={48} />
                 </div>
-                <div>
-                  <h2 className="text-3xl font-black text-gray-900">{selectedPet.name}</h2>
-                  <p className="text-xl text-gray-600">{selectedPet.breed}</p>
-                  <p className="text-gray-500">Owner: {selectedPet.customers?.name} • {selectedPet.customers?.phone}</p>
-                </div>
+                {editingPetInfo ? (
+                  <div className="flex-1 p-4 bg-blue-50 rounded-xl border-2 border-blue-200 space-y-3">
+                    <h3 className="font-bold text-gray-900">Edit Pet</h3>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Name</label>
+                      <input type="text" value={editPetData.name} onChange={(e) => setEditPetData({ ...editPetData, name: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Breed</label>
+                      <select value={editPetData.breed} onChange={(e) => setEditPetData({ ...editPetData, breed: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl">
+                        <option value="">Select Breed *</option>
+                        {Object.keys(BREED_DATABASE).filter(b => !b.startsWith('Mixed')).sort().map(breed => (<option key={breed} value={breed}>{breed}</option>))}
+                        <option disabled>──────────</option>
+                        {Object.keys(BREED_DATABASE).filter(b => b.startsWith('Mixed')).map(breed => (<option key={breed} value={breed}>{breed}</option>))}
+                      </select>
+                    </div>
+                    {editPetData.breed && (<div className={`p-2 rounded-lg text-center text-sm font-semibold ${BREED_DATABASE[editPetData.breed]?.weight <= 35 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{BREED_DATABASE[editPetData.breed]?.weight <= 35 ? '🐕 Small Dog' : '🐕‍🦺 Large Dog'} — Bath: ${typeof BREED_DATABASE[editPetData.breed]?.bath === 'string' ? BREED_DATABASE[editPetData.breed]?.bath : BREED_DATABASE[editPetData.breed]?.bath || '?'} | Groom: ${BREED_DATABASE[editPetData.breed]?.groom || 'N/A'}</div>)}
+                    <div className="flex gap-2">
+                      <button onClick={() => savePetInfo(selectedPet.id)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Save Changes</button>
+                      <button onClick={() => setEditingPetInfo(false)} className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-start justify-between">
+                    <div>
+                      <h2 className="text-3xl font-black text-gray-900">{selectedPet.name}</h2>
+                      <p className="text-xl text-gray-600">{selectedPet.breed}</p>
+                      <p className="text-gray-500">Owner: {selectedPet.customers?.name} • {selectedPet.customers?.phone}</p>
+                    </div>
+                    <button onClick={() => { setEditingPetInfo(true); setEditPetData({ name: selectedPet.name || '', breed: selectedPet.breed || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
+                      ✏️ Edit
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Vaccination Status */}
