@@ -497,7 +497,7 @@ export default function App() {
         supabase.from('schedule_slots').select('*, groomers(name)').eq('active', true).gte('date', today).lte('date', twoMonthsOut),
         supabase.from('services').select('*'),
         supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).gte('appointment_date', today).order('appointment_date', { ascending: true }),
-        supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("canceled","no_show")'),
+        supabase.from('bookings').select('id, appointment_date, appointment_time, groomer_id, groomers(id, name), dogs(id, size)').gte('appointment_date', today).lte('appointment_date', twoMonthsOut).not('status', 'in', '("cancelled","no_show")'),
         supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').eq('customer_id', userId).lt('appointment_date', today).eq('status', 'completed').order('appointment_date', { ascending: false }).limit(10),
         supabase.from('pet_vaccinations').select('*').eq('customer_id', userId)
       ]);
@@ -855,11 +855,12 @@ export default function App() {
       if (seen.has(key)) return;
       seen.add(key);
       
-      // Count current bookings
+      // Count current bookings (exclude cancelled and no_show)
       const slotBookings = allBookings.filter(b => 
         b.groomers?.id === schedule.groomer_id && 
         b.appointment_time === schedule.time && 
-        b.appointment_date === selectedDate
+        b.appointment_date === selectedDate &&
+        b.status !== 'cancelled' && b.status !== 'no_show'
       );
       const totalDogs = slotBookings.length;
       const largeCount = slotBookings.filter(b => b.dogs?.size === 'large').length;
@@ -1090,7 +1091,8 @@ export default function App() {
       const slotBookings = allBookings.filter(b => 
         b.groomers?.id === schedule.groomer_id && 
         b.appointment_time === schedule.time && 
-        b.appointment_date === fdSelectedDate
+        b.appointment_date === fdSelectedDate &&
+        b.status !== 'cancelled' && b.status !== 'no_show'
       );
       const totalDogs = slotBookings.length;
       const largeCount = slotBookings.filter(b => b.dogs?.size === 'large').length;
@@ -2043,7 +2045,8 @@ export default function App() {
       const slotBookings = allBookings.filter(b => 
         b.groomers?.id === groomerId && 
         b.appointment_time === time && 
-        b.appointment_date === date
+        b.appointment_date === date &&
+        b.status !== 'cancelled' && b.status !== 'no_show'
       );
       const totalDogs = slotBookings.length;
       const largeCount = slotBookings.filter(b => b.dogs?.size === 'large').length;
