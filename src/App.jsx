@@ -260,6 +260,9 @@ export default function App() {
   const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
   const [adminShowAddDog, setAdminShowAddDog] = useState(false);
   const [adminNewDog, setAdminNewDog] = useState({ name: '', breed: '' });
+  const [rescheduleBooking, setRescheduleBooking] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduling, setRescheduling] = useState(false);
   const [editingGroomerNotes, setEditingGroomerNotes] = useState(null);
   const [groomerNotesText, setGroomerNotesText] = useState('');
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
@@ -849,6 +852,9 @@ export default function App() {
     if (!selectedDate || !selectedDog) return [];
     const breedInfo = BREED_DATABASE[selectedDog.breed];
     const isLarge = breedInfo && breedInfo.weight > 35;
+    const isToday = selectedDate === new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     const slots = [];
     const seen = new Set();
@@ -860,6 +866,16 @@ export default function App() {
       const key = schedule.time + '-' + schedule.groomer_id;
       if (seen.has(key)) return;
       seen.add(key);
+      
+      // Skip past time slots if booking for today
+      if (isToday) {
+        const [t, period] = schedule.time.split(' ');
+        let [h, m] = t.split(':').map(Number);
+        if (period === 'PM' && h !== 12) h += 12;
+        if (period === 'AM' && h === 12) h = 0;
+        const slotMinutes = h * 60 + (m || 0);
+        if (slotMinutes <= currentMinutes) return;
+      }
       
       // Count current bookings (exclude cancelled and no_show)
       const slotBookings = allBookings.filter(b => 
@@ -916,7 +932,7 @@ export default function App() {
         if (customerData?.phone) {
           sendNotification('confirmation', {
             dogName: selectedDog.name,
-            date: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+            date: new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
             time: slot.time,
             groomer: slot.groomer
           }, customerData.phone);
@@ -928,7 +944,7 @@ export default function App() {
       sendEmailNotification('confirmation', {
         dogName: selectedDog.name,
         service: allServices.find(s => s.id === selectedService)?.name || 'Grooming',
-        date: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+        date: new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
         time: slot.time,
         groomer: slot.groomer,
         addOns: addOnNamesList.length > 0 ? addOnNamesList.join(', ') : null
@@ -972,7 +988,7 @@ export default function App() {
     }
     
     // More than 24 hours - can cancel online
-    const confirmed = window.confirm(`Cancel your appointment for ${booking.dogs?.name} on ${new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at ${booking.appointment_time}?\n\nThis cannot be undone.`);
+    const confirmed = window.confirm(`Cancel your appointment for ${booking.dogs?.name} on ${new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at ${booking.appointment_time}?\n\nThis cannot be undone.`);
     if (!confirmed) return;
     
     try {
@@ -1082,6 +1098,9 @@ export default function App() {
     // Count how many dogs (and large dogs) are being booked
     const newDogsCount = fdSelectedPets.length;
     const newLargeCount = fdSelectedPets.filter(p => BREED_DATABASE[p.breed]?.weight > 35).length;
+    const isToday = fdSelectedDate === new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     const slots = [];
     const seen = new Set();
@@ -1093,6 +1112,16 @@ export default function App() {
       const key = schedule.time + '-' + schedule.groomer_id;
       if (seen.has(key)) return;
       seen.add(key);
+      
+      // Skip past time slots if booking for today
+      if (isToday) {
+        const [t, period] = schedule.time.split(' ');
+        let [h, m] = t.split(':').map(Number);
+        if (period === 'PM' && h !== 12) h += 12;
+        if (period === 'AM' && h === 12) h = 0;
+        const slotMinutes = h * 60 + (m || 0);
+        if (slotMinutes <= currentMinutes) return;
+      }
       
       const slotBookings = allBookings.filter(b => 
         b.groomers?.id === schedule.groomer_id && 
@@ -1395,7 +1424,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-bold">Date</p>
-                  <p className="text-lg font-bold text-gray-900">{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                  <p className="text-lg font-bold text-gray-900">{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-bold">Time</p>
@@ -1686,7 +1715,7 @@ export default function App() {
         const petNames = fdSelectedPets.map(p => p.name).join(' & ');
         sendNotification('confirmation', {
           dogName: petNames,
-          date: new Date(fdSelectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+          date: new Date(fdSelectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
           time: slot.time,
           groomer: slot.groomer
         }, fdSelectedCustomer.phone);
@@ -1698,7 +1727,7 @@ export default function App() {
         sendEmailNotification('confirmation', {
           dogName: petNames,
           service: serviceName,
-          date: new Date(fdSelectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+          date: new Date(fdSelectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
           time: slot.time,
           groomer: slot.groomer,
           addOns: addOnNames.length > 0 ? addOnNames.join(', ') : null
@@ -1713,7 +1742,7 @@ export default function App() {
         pets: fdSelectedPets.map(p => ({ name: p.name, breed: p.breed })),
         service: serviceName,
         addOns: addOnNames,
-        date: new Date(fdSelectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+        date: new Date(fdSelectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
         time: slot.time,
         groomer: slot.groomer,
         notes: fdBookingNotes || null,
@@ -2067,7 +2096,7 @@ export default function App() {
     };
 
     const changeDate = (days) => {
-      const d = new Date(adminDate);
+      const d = new Date(adminDate + 'T00:00:00');
       d.setDate(d.getDate() + days);
       setAdminDate(d.toISOString().split('T')[0]);
     };
@@ -2157,6 +2186,128 @@ export default function App() {
           { petName: adminNewDog.name, breed: adminNewDog.breed, customerName: selectedCustomer.name }
         );
       } catch (error) { alert('Error adding pet: ' + error.message); }
+    };
+
+    // Reschedule: Get available slots for a date (for the booking's dog size)
+    const getRescheduleSlots = (date) => {
+      if (!date || !rescheduleBooking) return [];
+      const dog = rescheduleBooking.dogs;
+      const isLarge = dog?.size === 'large';
+      const isToday = date === new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const slots = [];
+      const seen = new Set();
+      
+      const dateSlots = scheduleSlots.filter(s => s.date === date && s.active);
+      
+      dateSlots.forEach(schedule => {
+        const key = schedule.time + '-' + schedule.groomer_id;
+        if (seen.has(key)) return;
+        seen.add(key);
+        
+        // Skip past time slots if rescheduling to today
+        if (isToday) {
+          const [t, period] = schedule.time.split(' ');
+          let [h, m] = t.split(':').map(Number);
+          if (period === 'PM' && h !== 12) h += 12;
+          if (period === 'AM' && h === 12) h = 0;
+          const slotMinutes = h * 60 + (m || 0);
+          if (slotMinutes <= currentMinutes) return;
+        }
+        
+        const slotBookings = allBookings.filter(b => 
+          b.groomers?.id === schedule.groomer_id && 
+          b.appointment_time === schedule.time && 
+          b.appointment_date === date &&
+          b.status !== 'cancelled' && b.status !== 'no_show' &&
+          b.id !== rescheduleBooking.id
+        );
+        const totalDogs = slotBookings.length;
+        const largeCount = slotBookings.filter(b => b.dogs?.size === 'large').length;
+        const maxDogs = schedule.max_dogs ?? 2;
+        const maxLarge = schedule.max_large ?? 1;
+        const hasRoom = (totalDogs < maxDogs) && (!isLarge || largeCount < maxLarge);
+        
+        slots.push({
+          time: schedule.time,
+          groomer: schedule.groomers?.name || 'Unknown',
+          groomerId: schedule.groomer_id,
+          hasRoom,
+          totalDogs,
+          maxDogs
+        });
+      });
+      
+      return slots.filter(s => s.hasRoom).sort((a, b) => {
+        const getMinutes = (time) => { const [t, period] = time.split(' '); let [h, m] = t.split(':').map(Number); if (period === 'PM' && h !== 12) h += 12; if (period === 'AM' && h === 12) h = 0; return h * 60 + (m || 0); };
+        return getMinutes(a.time) - getMinutes(b.time);
+      });
+    };
+
+    // Reschedule: Cancel old booking + create new one
+    const executeReschedule = async (newSlot) => {
+      if (!rescheduleBooking) return;
+      setRescheduling(true);
+      try {
+        const oldBooking = rescheduleBooking;
+        const oldDate = new Date(oldBooking.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const newDate = new Date(rescheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        
+        // Cancel old booking
+        await supabase.from('bookings').update({ 
+          status: 'cancelled',
+          notes: (oldBooking.notes || '') + ` | ♻️ Rescheduled to ${rescheduleDate} ${newSlot.time} with ${newSlot.groomer}`
+        }).eq('id', oldBooking.id);
+        
+        // Create new booking with same details
+        const newBookingData = {
+          customer_id: oldBooking.customer_id,
+          dog_id: oldBooking.dog_id,
+          groomer_id: newSlot.groomerId,
+          service_id: oldBooking.service_id,
+          appointment_date: rescheduleDate,
+          appointment_time: newSlot.time,
+          status: 'scheduled',
+          notes: `♻️ Rescheduled from ${oldBooking.appointment_date} ${oldBooking.appointment_time} | ` + (oldBooking.notes || '').replace(/♻️ Rescheduled.*?\|/g, '').trim(),
+          sms_consent: oldBooking.sms_consent,
+          add_ons: oldBooking.add_ons || [],
+          add_on_names: oldBooking.add_on_names || [],
+          add_ons_total: oldBooking.add_ons_total || 0,
+          created_by_staff_name: currentStaff?.name || null,
+          created_by_staff_id: currentStaff?.id || null
+        };
+        
+        const { error } = await supabase.from('bookings').insert([newBookingData]);
+        if (error) throw error;
+        
+        // Log the reschedule
+        await logActivity('booking_rescheduled', 'booking', oldBooking.id,
+          `Rescheduled ${oldBooking.dogs?.name} (${oldBooking.customers?.name}) from ${oldBooking.appointment_date} ${oldBooking.appointment_time} to ${rescheduleDate} ${newSlot.time} with ${newSlot.groomer}`,
+          { petName: oldBooking.dogs?.name, customerName: oldBooking.customers?.name, oldDate: oldBooking.appointment_date, oldTime: oldBooking.appointment_time, newDate: rescheduleDate, newTime: newSlot.time, newGroomer: newSlot.groomer }
+        );
+        
+        // Send reschedule email
+        if (oldBooking.customers?.email) {
+          sendEmailNotification('confirmation', {
+            dogName: oldBooking.dogs?.name,
+            service: oldBooking.services?.name || 'Grooming',
+            date: newDate,
+            time: newSlot.time,
+            groomer: newSlot.groomer,
+            addOns: oldBooking.add_on_names?.length > 0 ? oldBooking.add_on_names.join(', ') : null
+          }, oldBooking.customers.email);
+        }
+        
+        await loadAllBookings();
+        setRescheduleBooking(null);
+        setRescheduleDate('');
+        alert(`✅ Rescheduled ${oldBooking.dogs?.name} to ${newDate} at ${newSlot.time} with ${newSlot.groomer}`);
+      } catch (error) {
+        alert('Error rescheduling: ' + error.message);
+      } finally {
+        setRescheduling(false);
+      }
     };
 
     const saveGroomerNotesFromCard = async (dogId) => {
@@ -2513,6 +2664,85 @@ export default function App() {
           </div>
         )}
         
+        {/* Reschedule Booking Modal */}
+        {rescheduleBooking && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-black text-gray-900">📅 Reschedule Appointment</h2>
+                  <button onClick={() => { setRescheduleBooking(null); setRescheduleDate(''); }} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                </div>
+                
+                {/* Current booking info */}
+                <div className="p-4 bg-red-50 rounded-xl border-2 border-red-200 mb-6">
+                  <p className="text-xs font-bold text-red-600 uppercase mb-2">Current Appointment</p>
+                  <p className="font-bold text-gray-900 text-lg">{rescheduleBooking.dogs?.name} <span className="font-normal text-gray-500">({rescheduleBooking.dogs?.breed})</span></p>
+                  <p className="text-gray-700">{rescheduleBooking.services?.name} with {rescheduleBooking.groomers?.name}</p>
+                  <p className="text-gray-700 font-semibold">{new Date(rescheduleBooking.appointment_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {rescheduleBooking.appointment_time}</p>
+                  <p className="text-gray-500 text-sm mt-1">Owner: {rescheduleBooking.customers?.name} • {rescheduleBooking.customers?.phone}</p>
+                </div>
+                
+                {/* New date picker */}
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">New Date</label>
+                  <input 
+                    type="date" 
+                    value={rescheduleDate} 
+                    onChange={(e) => setRescheduleDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full p-3 border-2 border-gray-300 rounded-xl font-semibold focus:ring-4 focus:ring-blue-200 focus:border-blue-500"
+                  />
+                </div>
+                
+                {/* Available slots */}
+                {rescheduleDate && (() => {
+                  const slots = getRescheduleSlots(rescheduleDate);
+                  return (
+                    <div>
+                      <p className="text-sm font-bold text-gray-700 mb-3">Available Slots for {new Date(rescheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                      {slots.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-xl">
+                          <p className="text-gray-500">No available slots on this date</p>
+                          <p className="text-gray-400 text-sm mt-1">Try a different date</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {slots.map((slot, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => !rescheduling && executeReschedule(slot)}
+                              disabled={rescheduling}
+                              className={`p-4 rounded-xl border-2 transition text-left ${rescheduling ? 'opacity-50 cursor-not-allowed' : 'border-gray-200 hover:border-green-500 hover:bg-green-50'}`}
+                            >
+                              <span className="text-lg font-black text-gray-900 block">{slot.time}</span>
+                              <span className="text-sm text-gray-600">with {slot.groomer}</span>
+                              <span className="text-xs text-gray-400 block">{slot.totalDogs}/{slot.maxDogs} booked</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+                
+                {rescheduling && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-xl text-center">
+                    <p className="text-blue-700 font-semibold">⏳ Rescheduling...</p>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => { setRescheduleBooking(null); setRescheduleDate(''); }}
+                  className="w-full mt-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Edit Booking Services Modal */}
         {showEditServicesModal && editingBookingServices && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -3057,6 +3287,17 @@ export default function App() {
                               {booking.status !== 'cancelled' && booking.status !== 'completed' && (
                                 <button 
                                   onClick={() => {
+                                    setRescheduleBooking(booking);
+                                    setRescheduleDate('');
+                                  }}
+                                  className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-lg text-sm"
+                                >
+                                  📅 Reschedule
+                                </button>
+                              )}
+                              {booking.status !== 'cancelled' && booking.status !== 'completed' && (
+                                <button 
+                                  onClick={() => {
                                     if (confirm('Cancel this appointment?')) {
                                       updateBookingStatus(booking.id, 'cancelled', booking);
                                     }
@@ -3313,7 +3554,7 @@ export default function App() {
                                 <div className="text-right text-sm">
                                   <span className="font-bold text-green-600">${displayPrice}</span>
                                   <span className="text-gray-500 ml-2">{b.groomers?.name}</span>
-                                  <span className="text-gray-400 ml-2">{new Date(b.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  <span className="text-gray-400 ml-2">{new Date(b.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                   <span className={`ml-2 px-1.5 py-0.5 text-xs rounded font-bold ${
                                     b.status === 'completed' ? 'bg-green-100 text-green-700' :
                                     b.status === 'no_show' ? 'bg-red-100 text-red-700' :
@@ -3946,7 +4187,7 @@ export default function App() {
                           
                           return (
                             <tr key={b.id} className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="p-3">{new Date(b.appointment_date).toLocaleDateString()}</td>
+                              <td className="p-3">{new Date(b.appointment_date + 'T00:00:00').toLocaleDateString()}</td>
                               <td className="p-3">{b.appointment_time}</td>
                               <td className="p-3 font-semibold">{b.dogs?.name}</td>
                               <td className="p-3">{b.dogs?.breed}</td>
@@ -5075,9 +5316,9 @@ export default function App() {
               {selectedDate && selectedDog && selectedService && (<div><h3 className="font-bold text-lg text-gray-900 mb-4">Available Appointments</h3>{availableSlots.length === 0 ? (<div><div className="text-center py-8 sm:py-12 bg-gray-50 rounded-2xl mb-4"><Calendar className="mx-auto mb-4 text-gray-300" size={48} /><p className="text-gray-600 font-semibold mb-2">No appointments available</p><p className="text-gray-500 text-sm">Please try a different date</p></div><button onClick={() => setShowCallPopup(true)} className="w-full p-4 sm:p-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl font-bold text-base sm:text-lg transition shadow-lg flex items-center justify-center gap-3"><Phone size={24} />Can't Find a Time? Call Us!</button></div>) : (<><div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">{availableSlots.map((slot, idx) => (<button key={idx} onClick={() => showConfirmation(slot)} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 border-gray-200 hover:border-red-500 bg-white hover:bg-gradient-to-br hover:from-red-50 hover:to-orange-50 transition-all text-left shadow-md hover:shadow-xl"><div className="flex items-center justify-between mb-2 sm:mb-3"><span className="text-xl sm:text-2xl font-black text-gray-900">{slot.time}</span></div><div className="text-xs sm:text-sm text-gray-600 font-semibold">with {slot.groomer}</div></button>))}</div><button onClick={() => setShowCallPopup(true)} className="w-full p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold transition border-2 border-blue-200 flex items-center justify-center gap-2 text-sm sm:text-base"><Phone size={20} />Don't see a time that works? Call us!</button></>)}</div>)}
             </div>
 
-            {bookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Your Upcoming Appointments</h2><div className="space-y-3 sm:space-y-4">{bookings.filter(b => b.status === 'scheduled' || b.status === 'in_progress').map(booking => (<div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md"><div className="flex items-start justify-between gap-3"><div className="flex-1"><h3 className="font-black text-base sm:text-lg text-gray-900">{booking.dogs?.name}</h3><p className="text-gray-700 font-semibold mt-2 text-sm sm:text-base">📅 {new Date(booking.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p><p className="text-gray-700 font-semibold text-sm sm:text-base">🕐 {booking.appointment_time}</p><p className="text-gray-600 text-xs sm:text-sm mt-2">with {booking.groomers?.name} • {booking.services?.name}</p>{booking.notes && (<p className="text-gray-500 text-xs sm:text-sm mt-2 bg-white/50 p-2 rounded">📝 {booking.notes}</p>)}</div><div className="flex flex-col items-end gap-2"><div className="px-2 sm:px-4 py-1 sm:py-2 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full whitespace-nowrap">{booking.status === 'in_progress' ? 'In Progress' : 'Scheduled'}</div>{booking.status === 'scheduled' && <button onClick={() => handleCancelBooking(booking)} className="text-xs text-red-500 hover:text-red-700 font-semibold">Cancel</button>}</div></div></div>))}</div></div>)}
+            {bookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Your Upcoming Appointments</h2><div className="space-y-3 sm:space-y-4">{bookings.filter(b => b.status === 'scheduled' || b.status === 'in_progress').map(booking => (<div key={booking.id} className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md"><div className="flex items-start justify-between gap-3"><div className="flex-1"><h3 className="font-black text-base sm:text-lg text-gray-900">{booking.dogs?.name}</h3><p className="text-gray-700 font-semibold mt-2 text-sm sm:text-base">📅 {new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p><p className="text-gray-700 font-semibold text-sm sm:text-base">🕐 {booking.appointment_time}</p><p className="text-gray-600 text-xs sm:text-sm mt-2">with {booking.groomers?.name} • {booking.services?.name}</p>{booking.notes && (<p className="text-gray-500 text-xs sm:text-sm mt-2 bg-white/50 p-2 rounded">📝 {booking.notes}</p>)}</div><div className="flex flex-col items-end gap-2"><div className="px-2 sm:px-4 py-1 sm:py-2 bg-green-500 text-white text-xs sm:text-sm font-bold rounded-full whitespace-nowrap">{booking.status === 'in_progress' ? 'In Progress' : 'Scheduled'}</div>{booking.status === 'scheduled' && <button onClick={() => handleCancelBooking(booking)} className="text-xs text-red-500 hover:text-red-700 font-semibold">Cancel</button>}</div></div></div>))}</div></div>)}
 
-            {pastBookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Past Appointments</h2><div className="space-y-3 sm:space-y-4">{pastBookings.map(booking => (<div key={booking.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200"><div className="flex items-center justify-between gap-3"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-gray-900">{booking.dogs?.name}</h3><span className="text-gray-400">•</span><span className="text-sm text-gray-600">{booking.services?.name}</span></div><p className="text-sm text-gray-500 mt-1">{new Date(booking.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} with <span className="font-semibold text-gray-700">{booking.groomers?.name}</span></p></div><div className="flex-shrink-0 flex flex-col items-end gap-1"><span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">Completed</span><button onClick={() => { const dog = dogs.find(d => d.id === booking.dog_id); if (dog) { setSelectedDog(dog); setSelectedService(booking.service_id); }}} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Book again</button></div></div></div>))}</div><p className="text-xs text-gray-400 mt-4 text-center">Showing last 10 completed appointments</p></div>)}
+            {pastBookings.length > 0 && (<div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6"><h2 className="text-xl sm:text-2xl font-black text-gray-900 mb-4 sm:mb-6">Past Appointments</h2><div className="space-y-3 sm:space-y-4">{pastBookings.map(booking => (<div key={booking.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200"><div className="flex items-center justify-between gap-3"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-gray-900">{booking.dogs?.name}</h3><span className="text-gray-400">•</span><span className="text-sm text-gray-600">{booking.services?.name}</span></div><p className="text-sm text-gray-500 mt-1">{new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} with <span className="font-semibold text-gray-700">{booking.groomers?.name}</span></p></div><div className="flex-shrink-0 flex flex-col items-end gap-1"><span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">Completed</span><button onClick={() => { const dog = dogs.find(d => d.id === booking.dog_id); if (dog) { setSelectedDog(dog); setSelectedService(booking.service_id); }}} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Book again</button></div></div></div>))}</div><p className="text-xs text-gray-400 mt-4 text-center">Showing last 10 completed appointments</p></div>)}
           </div>
         </div>
       </div>
