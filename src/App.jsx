@@ -258,6 +258,8 @@ export default function App() {
   const [editCustomerData, setEditCustomerData] = useState({ name: '', phone: '', email: '' });
   const [editingPetInfo, setEditingPetInfo] = useState(false);
   const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
+  const [editingVax, setEditingVax] = useState(false);
+  const [editVaxData, setEditVaxData] = useState({ rabies: '', dhpp: '', bordetella: '' });
   const [adminShowAddDog, setAdminShowAddDog] = useState(false);
   const [adminNewDog, setAdminNewDog] = useState({ name: '', breed: '' });
   const [rescheduleBooking, setRescheduleBooking] = useState(null);
@@ -2166,6 +2168,44 @@ export default function App() {
       } catch (error) { alert('Error updating pet: ' + error.message); }
     };
 
+    // Admin: Update vaccination records
+    const saveVaxInfo = async (dogId) => {
+      try {
+        const record = {
+          dog_id: dogId,
+          customer_id: selectedPet?.customer_id || selectedCustomer?.id,
+          rabies_status: editVaxData.rabies || null,
+          dhpp_status: editVaxData.dhpp || null,
+          bordetella_status: editVaxData.bordetella || null,
+          updated_at: new Date().toISOString()
+        };
+        
+        const { data: existing } = await supabase.from('pet_vaccinations').select('id').eq('dog_id', dogId).single();
+        if (existing) {
+          await supabase.from('pet_vaccinations').update(record).eq('dog_id', dogId);
+        } else {
+          await supabase.from('pet_vaccinations').insert([record]);
+        }
+        
+        await loadAllBookings();
+        // Update local selectedPet with new vax data
+        setSelectedPet(prev => ({
+          ...prev,
+          vaccination: {
+            ...prev?.vaccination,
+            rabies_status: editVaxData.rabies || null,
+            dhpp_status: editVaxData.dhpp || null,
+            bordetella_status: editVaxData.bordetella || null
+          }
+        }));
+        setEditingVax(false);
+        await logActivity('vax_updated', 'dog', dogId,
+          `Updated vaccination records for ${selectedPet?.name}`,
+          { rabies: editVaxData.rabies, dhpp: editVaxData.dhpp, bordetella: editVaxData.bordetella }
+        );
+      } catch (error) { alert('Error updating vaccinations: ' + error.message); }
+    };
+
     // Admin: Add new dog to existing customer
     const adminAddDog = async (customerId) => {
       if (!adminNewDog.name || !adminNewDog.breed) {
@@ -2897,7 +2937,7 @@ export default function App() {
             <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPets([]); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">📞</span><span className="hidden sm:inline">📞 Front Desk</span>
             </button>
-            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); setEditingCustomerInfo(false); setEditingPetInfo(false); setAdminShowAddDog(false); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); setEditingCustomerInfo(false); setEditingPetInfo(false); setEditingVax(false); setAdminShowAddDog(false); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">👤</span><span className="hidden sm:inline">👤 Customers</span>
             </button>
             <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -4003,7 +4043,7 @@ export default function App() {
           {/* PET DETAIL VIEW */}
           {adminTab === 'customers' && selectedPet && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <button onClick={() => { setSelectedPet(null); setEditingPetInfo(false); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
+              <button onClick={() => { setSelectedPet(null); setEditingPetInfo(false); setEditingVax(false); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-semibold mb-6">
                 <ChevronLeft size={20} /> Back to {selectedCustomer?.name}
               </button>
               
@@ -4049,29 +4089,84 @@ export default function App() {
 
               {/* Vaccination Status */}
               <div className="mb-8 p-4 bg-gray-50 rounded-xl">
-                <h3 className="font-bold text-lg text-gray-900 mb-3">Vaccination Status</h3>
-                <div className="flex flex-wrap gap-3">
-                  {selectedPet.vaccination?.rabies_status ? (
-                    <span className="px-3 py-2 bg-green-100 text-green-800 font-bold rounded-lg flex items-center gap-2">
-                      <Check size={16} /> Rabies: {selectedPet.vaccination.rabies_status === 'upload' ? 'Uploaded' : 'Bringing copy'}
-                      {selectedPet.vaccination.rabies_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.rabies_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
-                    </span>
-                  ) : (
-                    <span className="px-3 py-2 bg-red-100 text-red-800 font-bold rounded-lg">❌ Rabies: Not provided</span>
-                  )}
-                  {selectedPet.vaccination?.dhpp_status && (
-                    <span className="px-3 py-2 bg-blue-100 text-blue-800 font-bold rounded-lg flex items-center gap-2">
-                      <Check size={16} /> DHPP
-                      {selectedPet.vaccination.dhpp_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.dhpp_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
-                    </span>
-                  )}
-                  {selectedPet.vaccination?.bordetella_status && (
-                    <span className="px-3 py-2 bg-blue-100 text-blue-800 font-bold rounded-lg flex items-center gap-2">
-                      <Check size={16} /> Bordetella
-                      {selectedPet.vaccination.bordetella_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.bordetella_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
-                    </span>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-lg text-gray-900">Vaccination Status</h3>
+                  {!editingVax && (
+                    <button onClick={() => { 
+                      setEditingVax(true); 
+                      setEditVaxData({ 
+                        rabies: selectedPet.vaccination?.rabies_status || '', 
+                        dhpp: selectedPet.vaccination?.dhpp_status || '', 
+                        bordetella: selectedPet.vaccination?.bordetella_status || '' 
+                      }); 
+                    }} className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-lg text-sm flex items-center gap-1">
+                      ✏️ Edit
+                    </button>
                   )}
                 </div>
+                
+                {editingVax ? (
+                  <div className="space-y-4">
+                    {/* Rabies */}
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Rabies</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => setEditVaxData({ ...editVaxData, rabies: 'on_file' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.rabies === 'on_file' ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-200 hover:border-green-300'}`}>✓ On File</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, rabies: 'bringing' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.rabies === 'bringing' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 hover:border-blue-300'}`}>📋 Bringing</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, rabies: '' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${!editVaxData.rabies ? 'border-red-500 bg-red-50 text-red-800' : 'border-gray-200 hover:border-red-300'}`}>❌ None</button>
+                      </div>
+                    </div>
+                    {/* DHPP */}
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">DHPP</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => setEditVaxData({ ...editVaxData, dhpp: 'on_file' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.dhpp === 'on_file' ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-200 hover:border-green-300'}`}>✓ On File</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, dhpp: 'bringing' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.dhpp === 'bringing' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 hover:border-blue-300'}`}>📋 Bringing</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, dhpp: '' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${!editVaxData.dhpp ? 'border-red-500 bg-red-50 text-red-800' : 'border-gray-200 hover:border-red-300'}`}>❌ None</button>
+                      </div>
+                    </div>
+                    {/* Bordetella */}
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Bordetella</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => setEditVaxData({ ...editVaxData, bordetella: 'on_file' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.bordetella === 'on_file' ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-200 hover:border-green-300'}`}>✓ On File</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, bordetella: 'bringing' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${editVaxData.bordetella === 'bringing' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 hover:border-blue-300'}`}>📋 Bringing</button>
+                        <button onClick={() => setEditVaxData({ ...editVaxData, bordetella: '' })} className={`p-2 rounded-lg border-2 text-sm font-semibold transition ${!editVaxData.bordetella ? 'border-red-500 bg-red-50 text-red-800' : 'border-gray-200 hover:border-red-300'}`}>❌ None</button>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button onClick={() => saveVaxInfo(selectedPet.id)} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl">Save Vaccinations</button>
+                      <button onClick={() => setEditingVax(false)} className="px-4 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-bold">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {selectedPet.vaccination?.rabies_status ? (
+                      <span className="px-3 py-2 bg-green-100 text-green-800 font-bold rounded-lg flex items-center gap-2">
+                        <Check size={16} /> Rabies: {selectedPet.vaccination.rabies_status === 'upload' ? 'Uploaded' : selectedPet.vaccination.rabies_status === 'on_file' ? 'On file' : 'Bringing copy'}
+                        {selectedPet.vaccination.rabies_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.rabies_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-2 bg-red-100 text-red-800 font-bold rounded-lg">❌ Rabies: Not provided</span>
+                    )}
+                    {selectedPet.vaccination?.dhpp_status ? (
+                      <span className="px-3 py-2 bg-blue-100 text-blue-800 font-bold rounded-lg flex items-center gap-2">
+                        <Check size={16} /> DHPP: {selectedPet.vaccination.dhpp_status === 'on_file' ? 'On file' : 'Bringing copy'}
+                        {selectedPet.vaccination.dhpp_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.dhpp_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-2 bg-gray-100 text-gray-500 font-bold rounded-lg">DHPP: Not provided</span>
+                    )}
+                    {selectedPet.vaccination?.bordetella_status ? (
+                      <span className="px-3 py-2 bg-blue-100 text-blue-800 font-bold rounded-lg flex items-center gap-2">
+                        <Check size={16} /> Bordetella: {selectedPet.vaccination.bordetella_status === 'on_file' ? 'On file' : 'Bringing copy'}
+                        {selectedPet.vaccination.bordetella_file && <button onClick={async () => { const url = await getVaccinationFileUrl(selectedPet.vaccination.bordetella_file); if(url) window.open(url, '_blank'); }} className="underline">View</button>}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-2 bg-gray-100 text-gray-500 font-bold rounded-lg">Bordetella: Not provided</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Permanent Pet Notes */}
