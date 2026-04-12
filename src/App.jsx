@@ -369,6 +369,7 @@ export default function App() {
   const [walkInNotes, setWalkInNotes] = useState('');
   const [walkInPriceOverrides, setWalkInPriceOverrides] = useState({}); // { service_id: custom_price }
   const [walkInGroomer, setWalkInGroomer] = useState(''); // groomer id
+  const [walkInCustomItems, setWalkInCustomItems] = useState([]); // [{ name: '', price: '' }]
 
   // Edit Booking Services
   const [showEditServicesModal, setShowEditServicesModal] = useState(false);
@@ -2538,6 +2539,22 @@ export default function App() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Custom Items */}
+                    {walkInCustomItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 mt-2">
+                        <input type="text" placeholder="Service name" value={item.name} onChange={(e) => { const items = [...walkInCustomItems]; items[idx].name = e.target.value; setWalkInCustomItems(items); }} className="flex-1 p-2 border-2 border-gray-300 rounded-lg text-sm" />
+                        <div className="flex items-center">
+                          <span className="text-gray-500 mr-1">$</span>
+                          <input type="number" placeholder="0" value={item.price} onChange={(e) => { const items = [...walkInCustomItems]; items[idx].price = e.target.value; setWalkInCustomItems(items); }} className="w-20 p-2 border-2 border-gray-300 rounded-lg text-sm" />
+                        </div>
+                        <button onClick={() => setWalkInCustomItems(walkInCustomItems.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+                      </div>
+                    ))}
+                    <button onClick={() => setWalkInCustomItems([...walkInCustomItems, { name: '', price: '' }])} className="w-full mt-2 py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-green-400 hover:text-green-600 font-semibold text-sm transition">
+                      + Custom Item
+                    </button>
+
                   </div>
                   
                   {/* Selected services with editable prices */}
@@ -2581,16 +2598,16 @@ export default function App() {
                     />
                   </div>
                   
-                  {walkInServices.length > 0 && (
+                  {(walkInServices.length > 0 || walkInCustomItems.some(i => i.name && i.price)) && (
                     <div className="p-4 bg-green-50 rounded-xl">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-700">Total:</span>
                         <span className="text-2xl font-black text-green-600">
-                          ${walkInServices.reduce((total, id) => {
+                          ${(walkInServices.reduce((total, id) => {
                             const service = WALK_IN_SERVICES.find(s => s.id === id);
                             const price = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
                             return total + (price || 0);
-                          }, 0).toFixed(2)}
+                          }, 0) + walkInCustomItems.reduce((t, item) => t + (parseFloat(item.price) || 0), 0)).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -2598,8 +2615,8 @@ export default function App() {
                   
                   <button
                     onClick={async () => {
-                      if (walkInServices.length === 0) {
-                        alert('Please select at least one service');
+                      if (walkInServices.length === 0 && !walkInCustomItems.some(i => i.name && i.price)) {
+                        alert('Please select at least one service or add a custom item');
                         return;
                       }
                       if (!walkInGroomer) {
@@ -2611,8 +2628,9 @@ export default function App() {
                         const service = WALK_IN_SERVICES.find(s => s.id === id);
                         const price = walkInPriceOverrides[id] !== undefined ? walkInPriceOverrides[id] : service?.price;
                         return t + (price || 0);
-                      }, 0);
-                      const serviceNames = walkInServices.map(id => WALK_IN_SERVICES.find(s => s.id === id)?.name).join(', ');
+                      }, 0) + walkInCustomItems.reduce((t, item) => t + (parseFloat(item.price) || 0), 0);
+                      const customNames = walkInCustomItems.filter(i => i.name && i.price).map(i => `${i.name} ($${parseFloat(i.price).toFixed(2)})`);
+                      const serviceNames = [...walkInServices.map(id => WALK_IN_SERVICES.find(s => s.id === id)?.name), ...customNames.map(n => n.split(' ($')[0])].filter(Boolean).join(', ');
                       
                       // Create a walk-in record
                       const { error } = await supabase.from('walk_in_sales').insert({
@@ -2621,7 +2639,7 @@ export default function App() {
                         services: walkInServices,
                         service_names: serviceNames,
                         total_price: total,
-                        notes: walkInNotes || null,
+                        notes: (walkInNotes || '') + (customNames.length > 0 ? (walkInNotes ? ' | ' : '') + 'Custom: ' + customNames.join(', ') : ''),
                         staff_name: currentStaff?.name || 'Staff',
                         groomer_id: walkInGroomer,
                         groomer_name: selectedGroomer?.name || 'Unknown',
@@ -2647,9 +2665,10 @@ export default function App() {
                       setWalkInNotes('');
                       setWalkInPriceOverrides({});
                       setWalkInGroomer('');
+                      setWalkInCustomItems([]);
                       setShowWalkInModal(false);
                     }}
-                    disabled={walkInServices.length === 0 || !walkInGroomer}
+                    disabled={(walkInServices.length === 0 && !walkInCustomItems.some(i => i.name && i.price)) || !walkInGroomer}
                     className={`w-full py-4 rounded-xl font-bold text-lg transition ${
                       walkInServices.length > 0 && walkInGroomer
                         ? 'bg-green-600 hover:bg-green-700 text-white'
@@ -2964,29 +2983,60 @@ export default function App() {
                 const today = new Date().toISOString().split('T')[0];
                 const todaysWalkIns = allWalkIns.filter(w => w.created_at?.split('T')[0] === today);
                 if (todaysWalkIns.length === 0) return null;
+                const activeWalkIns = todaysWalkIns.filter(w => !w.voided);
                 
                 return (
                   <div className="mt-8">
-                    <h3 className="text-2xl font-black text-gray-900 mb-4">💵 Today's Walk-In Sales ({todaysWalkIns.length})</h3>
+                    <h3 className="text-2xl font-black text-gray-900 mb-4">💵 Today's Walk-In Sales ({activeWalkIns.length}{todaysWalkIns.length !== activeWalkIns.length ? ` + ${todaysWalkIns.length - activeWalkIns.length} voided` : ''})</h3>
                     <div className="grid gap-3">
                       {todaysWalkIns.map(walkIn => (
-                        <div key={walkIn.id} className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 border-dashed">
+                        <div key={walkIn.id} className={`p-4 rounded-xl border-2 border-dashed ${walkIn.voided ? 'bg-gray-100 border-gray-300 opacity-60' : 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300'}`}>
                           <div className="flex items-center justify-between">
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">WALK-IN</span>
-                                <span className="font-bold text-gray-900">{walkIn.pet_name || 'Pet'}</span>
+                                <span className={`px-2 py-1 text-white text-xs font-bold rounded ${walkIn.voided ? 'bg-gray-400' : 'bg-green-500'}`}>{walkIn.voided ? 'VOIDED' : 'WALK-IN'}</span>
+                                <span className={`font-bold ${walkIn.voided ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{walkIn.pet_name || 'Pet'}</span>
                                 {walkIn.customer_name && walkIn.customer_name !== 'Walk-in' && (
                                   <span className="text-gray-500">({walkIn.customer_name})</span>
                                 )}
                               </div>
-                              <p className="text-sm text-gray-600 mt-1">{walkIn.service_names}</p>
+                              <p className={`text-sm mt-1 ${walkIn.voided ? 'text-gray-400' : 'text-gray-600'}`}>{walkIn.service_names}</p>
                               <p className="text-sm text-gray-500">
                                 {new Date(walkIn.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                                 {walkIn.groomer_name && <span className="ml-2">• {walkIn.groomer_name}</span>}
                               </p>
                             </div>
-                            <span className="text-2xl font-black text-green-600">${walkIn.total_price}</span>
+                            <div className="flex items-center gap-3">
+                              <span className={`text-2xl font-black ${walkIn.voided ? 'text-gray-400 line-through' : 'text-green-600'}`}>${walkIn.total_price}</span>
+                              {!walkIn.voided && (
+                                <div className="flex flex-col gap-1">
+                                  <button 
+                                    onClick={async () => {
+                                      const newPrice = prompt(`Edit price for ${walkIn.service_names}:`, walkIn.total_price);
+                                      if (newPrice === null) return;
+                                      const parsed = parseFloat(newPrice);
+                                      if (isNaN(parsed) || parsed < 0) { alert('Invalid price'); return; }
+                                      await supabase.from('walk_in_sales').update({ total_price: parsed }).eq('id', walkIn.id);
+                                      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                                      const { data } = await supabase.from('walk_in_sales').select('*').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false });
+                                      setAllWalkIns(data || []);
+                                    }}
+                                    className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-lg"
+                                  >✏️ Edit</button>
+                                  <button 
+                                    onClick={async () => {
+                                      if (!confirm(`Void this walk-in sale?\n\n${walkIn.service_names} — $${walkIn.total_price}`)) return;
+                                      await supabase.from('walk_in_sales').update({ voided: true }).eq('id', walkIn.id);
+                                      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                                      const { data } = await supabase.from('walk_in_sales').select('*').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false });
+                                      setAllWalkIns(data || []);
+                                      await logActivity('walkin_voided', 'walk_in', walkIn.id, `Voided walk-in: ${walkIn.service_names} — $${walkIn.total_price}`, {});
+                                    }}
+                                    className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg"
+                                  >🚫 Void</button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
