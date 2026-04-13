@@ -251,6 +251,8 @@ export default function App() {
   const [noteText, setNoteText] = useState('');
   const [adminTab, setAdminTab] = useState('calendar');
   const [groomerFilter, setGroomerFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [scheduleSearch, setScheduleSearch] = useState('');
   const [allCustomers, setAllCustomers] = useState([]);
   const [allPets, setAllPets] = useState([]);
   const [allWalkIns, setAllWalkIns] = useState([]); // Walk-in sales for display
@@ -2080,9 +2082,37 @@ export default function App() {
 
   // Admin Dashboard
   if (view === 'admin' && isAdmin) {
-    const filteredBookings = groomerFilter === 'all' 
-      ? getBookingsForDate(adminDate) 
-      : getBookingsForDate(adminDate).filter(b => b.groomers?.name === groomerFilter);
+    // Get all bookings for admin date (including cancelled/completed for filtering)
+    const allBookingsForDate = allBookings.filter(b => b.appointment_date === adminDate);
+    
+    // Apply filters
+    let filteredBookings = allBookingsForDate;
+    
+    // Status filter
+    if (statusFilter === 'active') {
+      filteredBookings = filteredBookings.filter(b => b.status !== 'cancelled' && b.status !== 'no_show' && b.status !== 'completed');
+    } else if (statusFilter === 'completed') {
+      filteredBookings = filteredBookings.filter(b => b.status === 'completed');
+    } else if (statusFilter === 'all_active') {
+      filteredBookings = filteredBookings.filter(b => b.status !== 'cancelled' && b.status !== 'no_show');
+    }
+    // 'all' shows everything
+    
+    // Groomer filter
+    if (groomerFilter !== 'all') {
+      filteredBookings = filteredBookings.filter(b => b.groomers?.name === groomerFilter);
+    }
+    
+    // Search filter
+    if (scheduleSearch.trim()) {
+      const search = scheduleSearch.toLowerCase().trim();
+      filteredBookings = filteredBookings.filter(b => 
+        b.dogs?.name?.toLowerCase().includes(search) ||
+        b.customers?.name?.toLowerCase().includes(search) ||
+        b.customers?.phone?.includes(search) ||
+        b.dogs?.breed?.toLowerCase().includes(search)
+      );
+    }
     
     // Calculate slot usage (small = 1 point, large = 2 points)
     const getSlotUsage = (groomerId, time, date) => {
@@ -2962,9 +2992,9 @@ export default function App() {
           {/* TODAY VIEW TAB */}
           {adminTab === 'today' && (
             <div className="space-y-4">
-              <div className="text-center mb-6">
-                <h2 className="text-4xl font-black text-gray-900">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h2>
-                <p className="text-xl text-gray-600 mt-2">{getTodayBookings().length} appointments today</p>
+              <div className="text-center mb-4">
+                <h2 className="text-3xl font-black text-gray-900">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h2>
+                <p className="text-lg text-gray-600 mt-1">{getTodayBookings().length} appointments today</p>
               </div>
               
               {getTodayBookings().length === 0 ? (
@@ -2973,54 +3003,57 @@ export default function App() {
                   <p className="text-2xl font-bold text-gray-400">No appointments today</p>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {getTodayBookings().map(booking => (
-                    <div key={booking.id} className={`p-6 rounded-2xl shadow-lg border-l-8 ${
-                      booking.status === 'completed' ? 'bg-green-50 border-green-500' :
-                      booking.status === 'in_progress' ? 'bg-blue-50 border-blue-500' :
-                      booking.status === 'checked_in' ? 'bg-purple-50 border-purple-500' :
-                      'bg-white border-yellow-400'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-6">
-                          <div className="text-center">
-                            <span className="text-3xl font-black text-gray-900">{booking.appointment_time}</span>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {getTodayBookings().map(booking => {
+                    const breedInfo = BREED_DATABASE[booking.dogs?.breed];
+                    const basePrice = booking.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
+                    const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
+                    const displayPrice = booking.actual_price !== null ? booking.actual_price : basePriceNum;
+                    const addOns = booking.add_ons_total || 0;
+                    const extras = (booking.extra_charges || []).reduce((s, c) => s + (c.price || 0), 0);
+                    const total = displayPrice + addOns + extras;
+                    
+                    return (
+                      <div key={booking.id} className={`p-4 rounded-xl shadow-md border-l-4 ${
+                        booking.status === 'completed' ? 'bg-green-50 border-green-500' :
+                        booking.status === 'in_progress' ? 'bg-blue-50 border-blue-500' :
+                        booking.status === 'checked_in' ? 'bg-purple-50 border-purple-500' :
+                        'bg-white border-yellow-400'
+                      }`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-black text-gray-900">{booking.appointment_time}</span>
+                            <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                              booking.status === 'completed' ? 'bg-green-500 text-white' :
+                              booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
+                              booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {booking.status === 'checked_in' ? 'Checked In' :
+                               booking.status === 'in_progress' ? 'In Progress' : 
+                               booking.status === 'completed' ? 'Done' : 'Scheduled'}
+                            </span>
                           </div>
-                          <div>
-                            <h3 className="text-2xl font-black text-gray-900">{booking.dogs?.name}</h3>
-                            <p className="text-lg text-gray-600">{booking.dogs?.breed} • {booking.services?.name}</p>
-                            <p className="text-gray-500">{booking.customers?.name} • {booking.customers?.phone}</p>
-                            {booking.dogs?.notes && <p className="mt-2 text-purple-700 bg-purple-100 px-3 py-1 rounded-lg text-sm inline-block">🐕 {booking.dogs.notes}</p>}
-                          </div>
+                          <span className="text-lg font-black text-green-600">${total}</span>
                         </div>
-                        <div className="flex flex-col items-end gap-3">
-                          <span className={`px-4 py-2 text-lg font-bold rounded-full ${
-                            booking.status === 'completed' ? 'bg-green-500 text-white' :
-                            booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
-                            booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {booking.status === 'checked_in' ? '✓ Checked In' :
-                             booking.status === 'in_progress' ? '🔄 In Progress' : 
-                             booking.status === 'completed' ? '✅ Done' :
-                             '📅 Scheduled'}
-                          </span>
-                          <div className="flex gap-2">
-                            {booking.status === 'scheduled' && (
-                              <button onClick={() => updateBookingStatus(booking.id, 'checked_in', booking)} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg">✓ Check In</button>
-                            )}
-                            {booking.status === 'checked_in' && (
-                              <button onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg">🔄 Start</button>
-                            )}
-                            {booking.status === 'in_progress' && (
-                              <button onClick={() => updateBookingStatus(booking.id, 'completed', booking)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg">✅ Complete</button>
-                            )}
-                          </div>
-                          <span className="text-lg font-bold text-gray-600">{booking.groomers?.name}</span>
+                        <h3 className="text-lg font-black text-gray-900">{booking.dogs?.name} <span className="font-normal text-sm text-gray-500">({booking.dogs?.breed})</span></h3>
+                        <p className="text-sm text-gray-600">{booking.services?.name} • {booking.groomers?.name}</p>
+                        <p className="text-sm text-gray-500">{booking.customers?.name} • {booking.customers?.phone}</p>
+                        {booking.dogs?.notes && <p className="mt-1 text-purple-700 bg-purple-100 px-2 py-0.5 rounded text-xs inline-block">🐕 {booking.dogs.notes}</p>}
+                        <div className="flex gap-2 mt-3">
+                          {booking.status === 'scheduled' && (
+                            <button onClick={() => updateBookingStatus(booking.id, 'checked_in', booking)} className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-sm">✓ Check In</button>
+                          )}
+                          {booking.status === 'checked_in' && (
+                            <button onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm">🔄 Start</button>
+                          )}
+                          {booking.status === 'in_progress' && (
+                            <button onClick={() => updateBookingStatus(booking.id, 'completed', booking)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm">✅ Complete</button>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               
@@ -3105,12 +3138,29 @@ export default function App() {
                 <button onClick={() => changeDate(1)} className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition"><ChevronRight size={24} /></button>
               </div>
               
-              <div className="flex gap-4 mb-6">
-                <input type="date" value={adminDate} onChange={(e) => setAdminDate(e.target.value)} className="flex-1 p-3 border-2 border-gray-300 rounded-xl" />
+              <div className="flex flex-wrap gap-3 mb-6">
+                <input type="date" value={adminDate} onChange={(e) => setAdminDate(e.target.value)} className="p-3 border-2 border-gray-300 rounded-xl" />
                 <select value={groomerFilter} onChange={(e) => setGroomerFilter(e.target.value)} className="p-3 border-2 border-gray-300 rounded-xl font-semibold">
                   <option value="all">All Groomers</option>
                   {uniqueGroomers.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="p-3 border-2 border-gray-300 rounded-xl font-semibold">
+                  <option value="active">Active (In Progress)</option>
+                  <option value="all_active">All Except Cancelled</option>
+                  <option value="completed">Completed Only</option>
+                  <option value="all">Everything</option>
+                </select>
+                <div className="flex-1 min-w-[200px] relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="Search dog, owner, phone..." 
+                    value={scheduleSearch} 
+                    onChange={(e) => setScheduleSearch(e.target.value)}
+                    className="w-full pl-10 p-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500"
+                  />
+                  {scheduleSearch && <button onClick={() => setScheduleSearch('')} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">✕</button>}
+                </div>
               </div>
               
               {filteredBookings.length === 0 ? (
