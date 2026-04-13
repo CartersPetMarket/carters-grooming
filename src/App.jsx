@@ -4336,7 +4336,8 @@ export default function App() {
                           const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
                           const displayPrice = b.actual_price !== null ? b.actual_price : basePriceNum;
                           const addOnsTotal = b.add_ons_total || 0;
-                          const rowTotal = displayPrice + addOnsTotal;
+                          const extraChargesTotal = (b.extra_charges || []).reduce((sum, c) => sum + (c.price || 0), 0);
+                          const rowTotal = displayPrice + addOnsTotal + extraChargesTotal;
                           
                           return (
                             <tr key={b.id} className="border-b border-gray-200 hover:bg-gray-50">
@@ -4372,7 +4373,7 @@ export default function App() {
                                     onClick={() => { setEditingBookingPrice(b.id); setBookingPriceValue(displayPrice.toString()); }}
                                     className="font-semibold hover:text-blue-600"
                                   >
-                                    ${rowTotal}{addOnsTotal > 0 && <span className="text-xs text-purple-500 ml-1">(+${addOnsTotal} add-ons)</span>}
+                                    ${rowTotal}{addOnsTotal > 0 && <span className="text-xs text-purple-500 ml-1">(+${addOnsTotal} add-ons)</span>}{extraChargesTotal > 0 && <span className="text-xs text-orange-500 ml-1">(+${extraChargesTotal} extra)</span>}
                                     {b.actual_price !== null && <span className="text-xs text-green-600 ml-1">✓</span>}
                                   </button>
                                 )}
@@ -4398,7 +4399,8 @@ export default function App() {
                             const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                             const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
                             const addOns = b.add_ons_total || 0;
-                            return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns;
+                            const extras = (b.extra_charges || []).reduce((s, c) => s + (c.price || 0), 0);
+                            return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns + extras;
                           }, 0).toFixed(2)}
                         </p>
                       </div>
@@ -4411,7 +4413,8 @@ export default function App() {
                         const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                         const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
                         const addOns = b.add_ons_total || 0;
-                        return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns;
+                        const extras = (b.extra_charges || []).reduce((s, c) => s + (c.price || 0), 0);
+                        return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns + extras;
                       }, 0);
                       
                       const filteredWalkIns = allWalkIns.filter(w => {
