@@ -211,6 +211,12 @@ const WALK_IN_SERVICES = [
 // Admin emails - add your email here
 const ADMIN_EMAILS = ['jordan@carterspetmarket.com', 'team@carterspetmarket.com'];
 
+// Get today's date in local timezone (NOT UTC) — prevents date shift after 7pm CST
+const getLocalToday = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('landing');
@@ -240,7 +246,7 @@ export default function App() {
   const [showVaccinationModal, setShowVaccinationModal] = useState(false);
   const [vaccinationDog, setVaccinationDog] = useState(null);
   const [adminView, setAdminView] = useState('calendar');
-  const [adminDate, setAdminDate] = useState(new Date().toISOString().split('T')[0]);
+  const [adminDate, setAdminDate] = useState(getLocalToday());
   const [editingNotes, setEditingNotes] = useState(null);
   const [noteText, setNoteText] = useState('');
   const [adminTab, setAdminTab] = useState('calendar');
@@ -268,7 +274,7 @@ export default function App() {
   const [editingGroomerNotes, setEditingGroomerNotes] = useState(null);
   const [groomerNotesText, setGroomerNotesText] = useState('');
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
-  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reportEndDate, setReportEndDate] = useState(getLocalToday());
   const [reportGroomer, setReportGroomer] = useState('all');
   const [reportData, setReportData] = useState([]);
   const [allGroomers, setAllGroomers] = useState([]);
@@ -289,7 +295,7 @@ export default function App() {
   
   // Date-based scheduling
   const [scheduleSlots, setScheduleSlots] = useState([]);
-  const [scheduleViewDate, setScheduleViewDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduleViewDate, setScheduleViewDate] = useState(getLocalToday());
   const [scheduleViewMode, setScheduleViewMode] = useState('week'); // 'week' or 'day'
   const [groomerTemplates, setGroomerTemplates] = useState([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -314,7 +320,7 @@ export default function App() {
   const [fdSelectedPets, setFdSelectedPets] = useState([]);
   const [fdSelectedService, setFdSelectedService] = useState('');
   const [fdSelectedAddOns, setFdSelectedAddOns] = useState([]);
-  const [fdSelectedDate, setFdSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fdSelectedDate, setFdSelectedDate] = useState(getLocalToday());
   const [fdBookingNotes, setFdBookingNotes] = useState('');
   const [fdShowNewCustomer, setFdShowNewCustomer] = useState(false);
   const [fdNewCustomer, setFdNewCustomer] = useState({ name: '', phone: '', email: '' });
@@ -490,7 +496,7 @@ export default function App() {
   const loadUserData = async (userId) => {
     setLoadingData(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalToday();
       const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       // Test query first - if this fails, don't bother with the rest
@@ -566,7 +572,7 @@ export default function App() {
   };
 
   const loadAllBookings = async () => {
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', new Date().toISOString().split('T')[0]).order('appointment_date', { ascending: true });
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', getLocalToday()).order('appointment_date', { ascending: true });
     const { data: allVax } = await supabase.from('pet_vaccinations').select('*');
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
@@ -589,7 +595,7 @@ export default function App() {
     setAllServices(servicesData || []);
 
     // Load date-based schedule slots (next 3 months)
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalToday();
     const threeMonthsOut = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const { data: slotsData } = await supabase.from('schedule_slots').select('*, groomers(name)').gte('date', today).lte('date', threeMonthsOut).order('date, time');
     setScheduleSlots(slotsData || []);
@@ -855,7 +861,7 @@ export default function App() {
     if (!selectedDate || !selectedDog) return [];
     const breedInfo = BREED_DATABASE[selectedDog.breed];
     const isLarge = breedInfo && breedInfo.weight > 35;
-    const isToday = selectedDate === new Date().toISOString().split('T')[0];
+    const isToday = selectedDate === getLocalToday();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
@@ -1063,7 +1069,7 @@ export default function App() {
       setPromoValidated(false);
     }
   };
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  const getTodayDate = () => getLocalToday();
 
   // Activity Log function
   const logActivity = async (action, entityType, entityId, description, details = {}) => {
@@ -1101,7 +1107,7 @@ export default function App() {
     // Count how many dogs (and large dogs) are being booked
     const newDogsCount = fdSelectedPets.length;
     const newLargeCount = fdSelectedPets.filter(p => BREED_DATABASE[p.breed]?.weight > 35).length;
-    const isToday = fdSelectedDate === new Date().toISOString().split('T')[0];
+    const isToday = fdSelectedDate === getLocalToday();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
@@ -2234,7 +2240,7 @@ export default function App() {
       if (!date || !rescheduleBooking) return [];
       const dog = rescheduleBooking.dogs;
       const isLarge = dog?.size === 'large';
-      const isToday = date === new Date().toISOString().split('T')[0];
+      const isToday = date === getLocalToday();
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const slots = [];
@@ -2379,7 +2385,7 @@ export default function App() {
     };
 
     const getTodayBookings = () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalToday();
       return allBookings.filter(b => b.appointment_date === today && b.status !== 'cancelled' && b.status !== 'no_show').sort((a, b) => {
         const getMinutes = (time) => { const [t, period] = time.split(' '); let [h, m] = t.split(':').map(Number); if (period === 'PM' && h !== 12) h += 12; if (period === 'AM' && h === 12) h = 0; return h * 60 + (m || 0); };
         return getMinutes(a.appointment_time) - getMinutes(b.appointment_time);
@@ -2749,7 +2755,7 @@ export default function App() {
                     type="date" 
                     value={rescheduleDate} 
                     onChange={(e) => setRescheduleDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={getLocalToday()}
                     className="w-full p-3 border-2 border-gray-300 rounded-xl font-semibold focus:ring-4 focus:ring-blue-200 focus:border-blue-500"
                   />
                 </div>
@@ -3020,7 +3026,7 @@ export default function App() {
               
               {/* Today's Walk-In Sales */}
               {(() => {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalToday();
                 const todaysWalkIns = allWalkIns.filter(w => w.created_at?.split('T')[0] === today);
                 if (todaysWalkIns.length === 0) return null;
                 const activeWalkIns = todaysWalkIns.filter(w => !w.voided);
@@ -4255,7 +4261,7 @@ export default function App() {
                   <button 
                     onClick={async () => {
                       // Load bookings
-                      let query = supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').gte('appointment_date', reportStartDate).lte('appointment_date', reportEndDate).order('appointment_date', { ascending: true });
+                      let query = supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').gte('appointment_date', reportStartDate).lte('appointment_date', reportEndDate).not('status', 'in', '("cancelled","no_show")').order('appointment_date', { ascending: true });
                       const { data } = await query;
                       const filtered = reportGroomer === 'all' ? data : data?.filter(b => b.groomers?.name === reportGroomer);
                       setReportData(filtered || []);
@@ -4275,7 +4281,7 @@ export default function App() {
                   const walkInDate = w.created_at?.split('T')[0];
                   const matchesDate = walkInDate >= reportStartDate && walkInDate <= reportEndDate;
                   const matchesGroomer = reportGroomer === 'all' || w.groomer_name === reportGroomer;
-                  return matchesDate && matchesGroomer;
+                  return matchesDate && matchesGroomer && !w.voided;
                 });
                 
                 if (filteredWalkIns.length === 0) return null;
@@ -4329,6 +4335,8 @@ export default function App() {
                           const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                           const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
                           const displayPrice = b.actual_price !== null ? b.actual_price : basePriceNum;
+                          const addOnsTotal = b.add_ons_total || 0;
+                          const rowTotal = displayPrice + addOnsTotal;
                           
                           return (
                             <tr key={b.id} className="border-b border-gray-200 hover:bg-gray-50">
@@ -4364,7 +4372,7 @@ export default function App() {
                                     onClick={() => { setEditingBookingPrice(b.id); setBookingPriceValue(displayPrice.toString()); }}
                                     className="font-semibold hover:text-blue-600"
                                   >
-                                    ${displayPrice}
+                                    ${rowTotal}{addOnsTotal > 0 && <span className="text-xs text-purple-500 ml-1">(+${addOnsTotal} add-ons)</span>}
                                     {b.actual_price !== null && <span className="text-xs text-green-600 ml-1">✓</span>}
                                   </button>
                                 )}
@@ -4389,7 +4397,8 @@ export default function App() {
                             const breedInfo = BREED_DATABASE[b.dogs?.breed];
                             const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                             const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
-                            return sum + (b.actual_price !== null ? b.actual_price : basePriceNum);
+                            const addOns = b.add_ons_total || 0;
+                            return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns;
                           }, 0).toFixed(2)}
                         </p>
                       </div>
@@ -4401,14 +4410,15 @@ export default function App() {
                         const breedInfo = BREED_DATABASE[b.dogs?.breed];
                         const basePrice = b.services?.name === 'Full Groom' ? breedInfo?.groom : breedInfo?.bath;
                         const basePriceNum = typeof basePrice === 'string' ? parseInt(basePrice.split('-')[0]) : (basePrice || 0);
-                        return sum + (b.actual_price !== null ? b.actual_price : basePriceNum);
+                        const addOns = b.add_ons_total || 0;
+                        return sum + (b.actual_price !== null ? b.actual_price : basePriceNum) + addOns;
                       }, 0);
                       
                       const filteredWalkIns = allWalkIns.filter(w => {
                         const walkInDate = w.created_at?.split('T')[0];
                         const matchesDate = walkInDate >= reportStartDate && walkInDate <= reportEndDate;
                         const matchesGroomer = reportGroomer === 'all' || w.groomer_name === reportGroomer;
-                        return matchesDate && matchesGroomer;
+                        return matchesDate && matchesGroomer && !w.voided;
                       });
                       const walkInsTotal = filteredWalkIns.reduce((sum, w) => sum + (w.total_price || 0), 0);
                       
@@ -4739,7 +4749,7 @@ export default function App() {
                       const dateStr = day.toISOString().split('T')[0];
                       const daySlots = scheduleSlots.filter(s => s.date === dateStr);
                       const dayBookings = allBookings.filter(b => b.appointment_date === dateStr);
-                      const isToday = dateStr === new Date().toISOString().split('T')[0];
+                      const isToday = dateStr === getLocalToday();
                       const isPast = day < new Date(new Date().setHours(0,0,0,0));
                       
                       return (
