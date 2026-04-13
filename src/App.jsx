@@ -3262,20 +3262,20 @@ export default function App() {
                           </div>
                           {/* Groomer Notes - condensed on mobile */}
                           <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
-                            {booking.dogs?.notes ? (
-                              <div>
-                                <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Notes</p>
-                                <p className="text-gray-700 text-sm">{booking.dogs.notes}</p>
-                                <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(booking.dogs?.notes || ''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-xs mt-1">✏️ Edit</button>
-                              </div>
-                            ) : editingGroomerNotes === booking.dogs?.id ? (
+                            {editingGroomerNotes === booking.dogs?.id ? (
                               <div className="space-y-2">
-                                <p className="text-xs font-bold text-purple-700 uppercase">🐕 Add Groomer Notes</p>
+                                <p className="text-xs font-bold text-purple-700 uppercase">🐕 {booking.dogs?.notes ? 'Edit' : 'Add'} Groomer Notes</p>
                                 <textarea value={groomerNotesText} onChange={(e) => setGroomerNotesText(e.target.value)} placeholder="Sensitive ears, use #4 blade, etc." className="w-full p-2 border-2 border-gray-300 rounded-lg text-sm" rows={2} />
                                 <div className="flex gap-2">
                                   <button onClick={() => saveGroomerNotesFromCard(booking.dogs?.id)} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-sm">Save</button>
                                   <button onClick={() => { setEditingGroomerNotes(null); setGroomerNotesText(''); }} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-sm">Cancel</button>
                                 </div>
+                              </div>
+                            ) : booking.dogs?.notes ? (
+                              <div>
+                                <p className="text-xs font-bold text-purple-700 uppercase mb-1">🐕 Notes</p>
+                                <p className="text-gray-700 text-sm">{booking.dogs.notes}</p>
+                                <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(booking.dogs?.notes || ''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-xs mt-1">✏️ Edit</button>
                               </div>
                             ) : (
                               <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">🐕 + Add Groomer Notes</button>
