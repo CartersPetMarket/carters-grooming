@@ -194,6 +194,7 @@ const ADD_ON_SERVICES = [
   { id: 'deep_conditioner', name: 'Deep Conditioner Mask', price: 12 },
   { id: 'paw_nose_butter', name: 'Paw & Nose Butter', price: 10 },
   { id: 'tick_removal', name: 'Tick Removal', price: 15 },
+  { id: 'furminator', name: 'Furminator', price: 30 },
 ];
 
 // Walk-in services (includes add-ons plus walk-in specific services)
