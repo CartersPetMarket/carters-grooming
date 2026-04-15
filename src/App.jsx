@@ -1032,7 +1032,7 @@ export default function App() {
       setSelectedAddOns(completedBooking.addOnIds || []);
       
       // Calculate date X weeks from original booking
-      const futureDate = new Date(completedBooking.date);
+      const futureDate = new Date(completedBooking.date + 'T00:00:00');
       futureDate.setDate(futureDate.getDate() + (weeks * 7));
       setSelectedDate(futureDate.toISOString().split('T')[0]);
     }
@@ -1550,7 +1550,7 @@ export default function App() {
   const BookingSuccessModal = () => {
     if (!showBookingSuccess || !completedBooking) return null;
     
-    const formattedDate = new Date(completedBooking.date).toLocaleDateString('en-US', { 
+    const formattedDate = new Date(completedBooking.date + 'T00:00:00').toLocaleDateString('en-US', { 
       weekday: 'long', 
       month: 'long', 
       day: 'numeric',
