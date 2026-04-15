@@ -252,7 +252,7 @@ export default function App() {
   const [noteText, setNoteText] = useState('');
   const [adminTab, setAdminTab] = useState('calendar');
   const [groomerFilter, setGroomerFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('all_active');
   const [scheduleSearch, setScheduleSearch] = useState('');
   const [allCustomers, setAllCustomers] = useState([]);
   const [allPets, setAllPets] = useState([]);
@@ -1371,6 +1371,8 @@ export default function App() {
             
             <input
               type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={6}
               placeholder="Enter PIN"
               value={bookingPinInput}
@@ -5423,6 +5425,8 @@ export default function App() {
             
             <input
               type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={6}
               placeholder="Enter PIN"
               value={pinInput}
