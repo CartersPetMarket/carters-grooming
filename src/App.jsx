@@ -3228,7 +3228,32 @@ export default function App() {
                         
                         {/* Pet info */}
                         <h3 className="font-bold text-lg sm:text-xl text-gray-900">{booking.dogs?.name} <span className="font-normal text-gray-600">({booking.dogs?.breed})</span></h3>
-                        <p className="text-gray-700 text-sm sm:text-base">Service: <span className="font-semibold">{booking.services?.name}</span></p>
+                        <p className="text-gray-700 text-sm sm:text-base">Service: <span className="font-semibold">{booking.services?.name}</span>
+                          {booking.status !== 'completed' && booking.status !== 'cancelled' && (() => {
+                            const otherService = booking.services?.name === 'Full Groom' 
+                              ? allServices.find(s => s.name === 'Bath Only' || s.name === 'Bath')
+                              : allServices.find(s => s.name === 'Full Groom');
+                            const breedInfo = BREED_DATABASE[booking.dogs?.breed];
+                            const otherAvailable = otherService && (otherService.name === 'Full Groom' ? breedInfo?.groom : true);
+                            if (!otherService || !otherAvailable) return null;
+                            return (
+                              <button 
+                                onClick={async () => {
+                                  if (!confirm(`Change ${booking.dogs?.name}'s service from ${booking.services?.name} to ${otherService.name}?`)) return;
+                                  await supabase.from('bookings').update({ service_id: otherService.id, actual_price: null }).eq('id', booking.id);
+                                  await logActivity('service_changed', 'booking', booking.id,
+                                    `Changed ${booking.dogs?.name}'s service from ${booking.services?.name} to ${otherService.name}`,
+                                    { petName: booking.dogs?.name, oldService: booking.services?.name, newService: otherService.name }
+                                  );
+                                  await loadAllBookings();
+                                }}
+                                className="ml-2 text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                              >
+                                → Switch to {otherService.name === 'Full Groom' ? 'Full Groom' : 'Bath'}
+                              </button>
+                            );
+                          })()}
+                        </p>
                         <p className="text-gray-700 text-sm sm:text-base">
                           Price: {(() => {
                             const breedInfo = BREED_DATABASE[booking.dogs?.breed];
