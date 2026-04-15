@@ -1174,15 +1174,28 @@ export default function App() {
 
   // Front Desk: Search customers by phone
   const searchCustomersByPhone = (searchTerm) => {
-    if (!searchTerm || searchTerm.length < 3) {
+    if (!searchTerm || searchTerm.length < 2) {
       setFdSearchResults([]);
       return;
     }
-    const normalizedSearch = searchTerm.replace(/\D/g, '');
+    const lowerSearch = searchTerm.toLowerCase().trim();
+    const normalizedDigits = searchTerm.replace(/\D/g, '');
+    const hasDigits = normalizedDigits.length >= 3;
+    
     const results = allCustomers.filter(c => {
-      const normalizedPhone = (c.phone || '').replace(/\D/g, '');
-      return normalizedPhone.includes(normalizedSearch) || 
-             c.name?.toLowerCase().includes(searchTerm.toLowerCase());
+      // Match by phone (only if search has digits)
+      if (hasDigits) {
+        const normalizedPhone = (c.phone || '').replace(/\D/g, '');
+        if (normalizedPhone.includes(normalizedDigits)) return true;
+      }
+      // Match by customer name
+      if (c.name?.toLowerCase().includes(lowerSearch)) return true;
+      // Match by email
+      if (c.email?.toLowerCase().includes(lowerSearch)) return true;
+      // Match by dog name
+      const customerPets = allPets.filter(p => p.customer_id === c.id);
+      if (customerPets.some(p => p.name?.toLowerCase().includes(lowerSearch))) return true;
+      return false;
     });
     setFdSearchResults(results);
   };
@@ -3606,7 +3619,7 @@ export default function App() {
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                         <input 
                           type="text" 
-                          placeholder="Enter phone number or name..." 
+                          placeholder="Search by name, phone, or dog name..." 
                           value={fdPhoneSearch}
                           onChange={(e) => { setFdPhoneSearch(e.target.value); searchCustomersByPhone(e.target.value); }}
                           className="w-full pl-10 p-4 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-red-200 focus:border-red-500"
@@ -3625,20 +3638,24 @@ export default function App() {
                     {fdSearchResults.length > 0 && (
                       <div className="space-y-2 mb-6">
                         <p className="text-sm font-semibold text-gray-600">{fdSearchResults.length} customer(s) found:</p>
-                        {fdSearchResults.map(customer => (
-                          <button 
-                            key={customer.id}
-                            onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); }}
-                            className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
-                          >
-                            <p className="font-bold text-gray-900">{customer.name}</p>
-                            <p className="text-gray-600 text-sm">{customer.phone}</p>
-                          </button>
-                        ))}
+                        {fdSearchResults.map(customer => {
+                          const pets = allPets.filter(p => p.customer_id === customer.id);
+                          return (
+                            <button 
+                              key={customer.id}
+                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); }}
+                              className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
+                            >
+                              <p className="font-bold text-gray-900">{customer.name}</p>
+                              <p className="text-gray-600 text-sm">{customer.phone}</p>
+                              {pets.length > 0 && <p className="text-gray-400 text-xs mt-1">🐕 {pets.map(p => p.name).join(', ')}</p>}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
 
-                    {fdPhoneSearch.length >= 3 && fdSearchResults.length === 0 && !fdShowNewCustomer && (
+                    {fdPhoneSearch.length >= 2 && fdSearchResults.length === 0 && !fdShowNewCustomer && (
                       <div className="text-center py-4 bg-gray-50 rounded-xl mb-6">
                         <p className="text-gray-500 text-sm">No customer found for "{fdPhoneSearch}"</p>
                       </div>
