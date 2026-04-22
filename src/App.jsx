@@ -931,6 +931,19 @@ export default function App() {
     if (!canBookOnline(selectedDog.id)) { alert('Please complete vaccination records first'); return; }
     setBookingSubmitting(true);
     try {
+      // Check for duplicate booking (same dog, same date, not cancelled/no_show)
+      const { data: existing } = await supabase.from('bookings')
+        .select('id')
+        .eq('dog_id', selectedDog.id)
+        .eq('appointment_date', selectedDate)
+        .not('status', 'in', '("cancelled","no_show")')
+        .limit(1);
+      if (existing && existing.length > 0) {
+        alert(`${selectedDog.name} already has an appointment on this date. Please cancel the existing one first or choose a different date.`);
+        setBookingSubmitting(false);
+        return;
+      }
+      
       const vax = getDogVaxStatus(selectedDog.id);
       const vaxNotes = `Rabies: ${vax.rabiesMethod === 'upload' ? 'Uploaded' : 'Bringing physical copy'}`;
       const addOnNotes = selectedAddOns.length > 0 ? 'Add-ons: ' + selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).join(', ') + ' | ' : '';
@@ -1709,6 +1722,17 @@ export default function App() {
       
       // Create a booking for each selected pet
       for (const pet of fdSelectedPets) {
+        // Check for duplicate booking
+        const { data: existing } = await supabase.from('bookings')
+          .select('id')
+          .eq('dog_id', pet.id)
+          .eq('appointment_date', fdSelectedDate)
+          .not('status', 'in', '("cancelled","no_show")')
+          .limit(1);
+        if (existing && existing.length > 0) {
+          if (!confirm(`${pet.name} already has an appointment on this date. Book anyway?`)) continue;
+        }
+        
         const bookingData = {
           customer_id: fdSelectedCustomer.id,
           dog_id: pet.id,
