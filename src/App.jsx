@@ -371,6 +371,7 @@ export default function App() {
   // Booking success
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
   const [completedBooking, setCompletedBooking] = useState(null);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
 
   // Walk-in Sales
   const [showWalkInModal, setShowWalkInModal] = useState(false);
@@ -925,8 +926,10 @@ export default function App() {
   };
 
   const handleBooking = async (slot) => {
+    if (bookingSubmitting) return;
     if (!selectedService) { alert('Please select a service'); return; }
     if (!canBookOnline(selectedDog.id)) { alert('Please complete vaccination records first'); return; }
+    setBookingSubmitting(true);
     try {
       const vax = getDogVaxStatus(selectedDog.id);
       const vaxNotes = `Rabies: ${vax.rabiesMethod === 'upload' ? 'Uploaded' : 'Bringing physical copy'}`;
@@ -984,7 +987,7 @@ export default function App() {
       
       await loadUserData(user.id);
       setSelectedDog(null); setSelectedDate(''); setSelectedService(''); setSelectedAddOns([]); setHasSpecialNeeds(false); setBookingNotes(''); setSmsConsent(false); setPromoCode(''); setPromoValidated(null);
-    } catch (error) { alert(error.message); }
+    } catch (error) { alert(error.message); } finally { setBookingSubmitting(false); }
   };
 
   const handleCancelBooking = async (booking) => {
@@ -1545,9 +1548,10 @@ export default function App() {
           <div className="space-y-3">
             <button 
               onClick={() => handleBooking(confirmationSlot)}
-              className="w-full py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-black text-lg rounded-xl transition shadow-lg"
+              disabled={bookingSubmitting}
+              className={`w-full py-4 font-black text-lg rounded-xl transition shadow-lg ${bookingSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white'}`}
             >
-              ✓ Confirm Booking
+              {bookingSubmitting ? '⏳ Booking...' : '✓ Confirm Booking'}
             </button>
             <button 
               onClick={() => { setShowBookingConfirmation(false); setConfirmationSlot(null); }}
