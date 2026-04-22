@@ -1889,18 +1889,77 @@ export default function App() {
   const updateBookingStatus = async (bookingId, newStatus, booking) => {
     try {
       const oldStatus = booking?.status;
+      
+      // If marking as "ready", check family group
+      if (newStatus === 'ready' && booking) {
+        await supabase.from('bookings').update({ status: 'ready' }).eq('id', bookingId);
+        
+        await logActivity('booking_status', 'booking', bookingId,
+          `${booking?.dogs?.name || 'Pet'} is ready for pickup`,
+          { petName: booking?.dogs?.name, customerName: booking?.customers?.name, oldStatus, newStatus: 'ready', date: booking?.appointment_date }
+        );
+        
+        // Check if all dogs for this customer on this date are now ready
+        const { data: familyBookings } = await supabase.from('bookings')
+          .select('id, status, dog_id, dogs(name), groomers(name), services(name)')
+          .eq('customer_id', booking.customer_id)
+          .eq('appointment_date', booking.appointment_date)
+          .not('status', 'in', '("cancelled","no_show")');
+        
+        const allReady = familyBookings && familyBookings.every(b => b.status === 'ready' || b.id === bookingId);
+        
+        if (allReady && familyBookings) {
+          // All dogs ready — complete all and send one combined email
+          for (const fb of familyBookings) {
+            await supabase.from('bookings').update({ status: 'completed' }).eq('id', fb.id);
+          }
+          
+          // Build combined dog names
+          const dogNames = familyBookings.map(b => b.dogs?.name).filter(Boolean);
+          const combinedName = dogNames.length > 1 ? dogNames.slice(0, -1).join(', ') + ' & ' + dogNames[dogNames.length - 1] : dogNames[0] || 'Your pet';
+          const groomerNames = [...new Set(familyBookings.map(b => b.groomers?.name).filter(Boolean))];
+          const combinedGroomer = groomerNames.join(' & ');
+          const serviceNames = [...new Set(familyBookings.map(b => b.services?.name).filter(Boolean))];
+          const combinedService = serviceNames.join(' & ');
+          
+          // Send one combined email
+          if (booking.customers?.email) {
+            sendEmailNotification('completion', {
+              dogName: combinedName,
+              service: combinedService || 'Grooming',
+              groomer: combinedGroomer
+            }, booking.customers.email);
+          }
+          
+          // SMS if opted in
+          if (booking.sms_consent !== false && booking.customers?.phone) {
+            sendNotification('completion', {
+              dogName: combinedName,
+              date: booking.appointment_date,
+              time: booking.appointment_time,
+              groomer: combinedGroomer
+            }, booking.customers.phone);
+          }
+          
+          await logActivity('family_completed', 'booking', bookingId,
+            `All ${dogNames.length} pets ready — completed and notified: ${combinedName}`,
+            { dogNames, customerName: booking.customers?.name, date: booking.appointment_date }
+          );
+        }
+        
+        await loadAllBookings();
+        return;
+      }
+      
+      // Standard status update for all other transitions
       await supabase.from('bookings').update({ status: newStatus }).eq('id', bookingId);
       
-      // Log the status change
-      await logActivity(
-        'booking_status',
-        'booking',
-        bookingId,
+      await logActivity('booking_status', 'booking', bookingId,
         `Changed ${booking?.dogs?.name || 'Pet'}'s appointment status from ${oldStatus} to ${newStatus}`,
         { petName: booking?.dogs?.name, customerName: booking?.customers?.name, oldStatus, newStatus, date: booking?.appointment_date }
       );
       
-      // Send completion notification (only if customer opted in for SMS)
+      // Direct complete (skip ready) — send individual email
       if (newStatus === 'completed' && booking && booking.sms_consent !== false) {
         await sendNotification('completion', {
           dogName: booking.dogs?.name,
@@ -1909,8 +1968,6 @@ export default function App() {
           groomer: booking.groomers?.name
         }, booking.customers?.phone);
       }
-      
-      // Always send completion email
       if (newStatus === 'completed' && booking?.customers?.email) {
         sendEmailNotification('completion', {
           dogName: booking.dogs?.name,
@@ -2136,7 +2193,7 @@ export default function App() {
     if (statusFilter === 'active') {
       filteredBookings = filteredBookings.filter(b => b.status !== 'cancelled' && b.status !== 'no_show' && b.status !== 'completed');
     } else if (statusFilter === 'completed') {
-      filteredBookings = filteredBookings.filter(b => b.status === 'completed');
+      filteredBookings = filteredBookings.filter(b => b.status === 'completed' || b.status === 'ready');
     } else if (statusFilter === 'all_active') {
       filteredBookings = filteredBookings.filter(b => b.status !== 'cancelled' && b.status !== 'no_show');
     }
@@ -3060,6 +3117,7 @@ export default function App() {
                     return (
                       <div key={booking.id} className={`p-4 rounded-xl shadow-md border-l-4 ${
                         booking.status === 'completed' ? 'bg-green-50 border-green-500' :
+                        booking.status === 'ready' ? 'bg-emerald-50 border-emerald-400' :
                         booking.status === 'in_progress' ? 'bg-blue-50 border-blue-500' :
                         booking.status === 'checked_in' ? 'bg-purple-50 border-purple-500' :
                         'bg-white border-yellow-400'
@@ -3069,12 +3127,14 @@ export default function App() {
                             <span className="text-lg font-black text-gray-900">{booking.appointment_time}</span>
                             <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
                               booking.status === 'completed' ? 'bg-green-500 text-white' :
+                              booking.status === 'ready' ? 'bg-emerald-400 text-white' :
                               booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
                               booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
                               'bg-yellow-100 text-yellow-800'
                             }`}>
                               {booking.status === 'checked_in' ? 'Checked In' :
                                booking.status === 'in_progress' ? 'In Progress' : 
+                               booking.status === 'ready' ? '🐾 Ready' :
                                booking.status === 'completed' ? 'Done' : 'Scheduled'}
                             </span>
                           </div>
@@ -3092,7 +3152,10 @@ export default function App() {
                             <button onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm">🔄 Start</button>
                           )}
                           {booking.status === 'in_progress' && (
-                            <button onClick={() => updateBookingStatus(booking.id, 'completed', booking)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm">✅ Complete</button>
+                            <button onClick={() => updateBookingStatus(booking.id, 'ready', booking)} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-sm">🐾 Ready</button>
+                          )}
+                          {booking.status === 'ready' && (
+                            <span className="flex-1 py-2 text-center text-emerald-700 font-bold text-sm bg-emerald-100 rounded-lg">Waiting for family pickup</span>
                           )}
                         </div>
                       </div>
@@ -3221,6 +3284,7 @@ export default function App() {
                           <span className="text-xl sm:text-2xl font-black text-gray-900">{booking.appointment_time}</span>
                           <span className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-bold rounded-full ${
                             booking.status === 'completed' ? 'bg-green-500 text-white' :
+                            booking.status === 'ready' ? 'bg-emerald-400 text-white' :
                             booking.status === 'in_progress' ? 'bg-blue-500 text-white' :
                             booking.status === 'checked_in' ? 'bg-purple-500 text-white' :
                             booking.status === 'no_show' ? 'bg-red-500 text-white' :
@@ -3229,6 +3293,7 @@ export default function App() {
                           }`}>
                             {booking.status === 'checked_in' ? '✓ Checked In' :
                              booking.status === 'in_progress' ? '🔄 In Progress' : 
+                             booking.status === 'ready' ? '🐾 Ready' :
                              booking.status === 'completed' ? '✅ Done' :
                              booking.status === 'no_show' ? '❌ No Show' :
                              booking.status === 'cancelled' ? '🚫 Cancelled' :
@@ -3485,13 +3550,18 @@ export default function App() {
                               )}
                               {booking.status === 'in_progress' && (
                                 <button 
-                                  onClick={() => updateBookingStatus(booking.id, 'completed', booking)}
-                                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-sm flex items-center gap-2"
+                                  onClick={() => updateBookingStatus(booking.id, 'ready', booking)}
+                                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-sm flex items-center gap-2"
                                 >
-                                  ✅ Mark Complete & Notify
+                                  🐾 Ready for Pickup
                                 </button>
                               )}
-                              {(booking.status === 'completed' || booking.status === 'no_show') && (
+                              {booking.status === 'ready' && (
+                                <span className="px-4 py-2 bg-emerald-100 text-emerald-700 font-bold rounded-lg text-sm">
+                                  🐾 Waiting for pickup
+                                </span>
+                              )}
+                              {(booking.status === 'completed' || booking.status === 'no_show' || booking.status === 'ready') && (
                                 <button 
                                   onClick={() => updateBookingStatus(booking.id, 'scheduled', booking)}
                                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-sm"
@@ -3499,7 +3569,7 @@ export default function App() {
                                   ↩️ Reset to Scheduled
                                 </button>
                               )}
-                              {booking.status !== 'cancelled' && booking.status !== 'completed' && (
+                              {booking.status !== 'cancelled' && booking.status !== 'completed' && booking.status !== 'ready' && (
                                 <button 
                                   onClick={() => {
                                     setRescheduleBooking(booking);
