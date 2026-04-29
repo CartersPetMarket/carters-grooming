@@ -2875,7 +2875,7 @@ export default function App() {
                   <p className="text-xs font-bold text-red-600 uppercase mb-2">Current Appointment</p>
                   <p className="font-bold text-gray-900 text-lg">{rescheduleBooking.dogs?.name} <span className="font-normal text-gray-500">({rescheduleBooking.dogs?.breed})</span></p>
                   <p className="text-gray-700">{rescheduleBooking.services?.name} with {rescheduleBooking.groomers?.name}</p>
-                  <p className="text-gray-700 font-semibold">{new Date(rescheduleBooking.appointment_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {rescheduleBooking.appointment_time}</p>
+                  <p className="text-gray-700 font-semibold">{new Date(rescheduleBooking.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {rescheduleBooking.appointment_time}</p>
                   <p className="text-gray-500 text-sm mt-1">Owner: {rescheduleBooking.customers?.name} • {rescheduleBooking.customers?.phone}</p>
                 </div>
                 
@@ -4413,7 +4413,7 @@ export default function App() {
                       <div key={h.id} className="p-4 rounded-xl border border-gray-200 bg-white">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-bold text-gray-900">{new Date(h.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {h.appointment_time}</p>
+                            <p className="font-bold text-gray-900">{new Date(h.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at {h.appointment_time}</p>
                             <p className="text-gray-600">{h.services?.name} with {h.groomers?.name}</p>
                           </div>
                           <span className={`px-3 py-1 text-sm font-bold rounded-full ${h.status === 'completed' ? 'bg-green-100 text-green-800' : h.status === 'scheduled' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
