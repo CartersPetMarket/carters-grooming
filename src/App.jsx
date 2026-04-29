@@ -576,7 +576,8 @@ export default function App() {
   };
 
   const loadAllBookings = async () => {
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', getLocalToday()).order('appointment_date', { ascending: true });
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', thirtyDaysAgo).order('appointment_date', { ascending: true });
     const { data: allVax } = await supabase.from('pet_vaccinations').select('*');
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
