@@ -952,6 +952,29 @@ export default function App() {
       const promoNotes = promoValidated ? '🏷️ PROMO: ' + promoValidated.code + ' (' + promoValidated.description + ') | ' : '';
       const addOnNames = selectedAddOns.map(id => ADD_ON_SERVICES.find(s => s.id === id)?.name).filter(Boolean);
       const addOnsTotal = selectedAddOns.reduce((t, id) => { const s = ADD_ON_SERVICES.find(a => a.id === id); return t + (s?.price || 0); }, 0);
+      
+      // Fresh capacity check right before insert (prevents stale data race conditions)
+      const { data: freshSlotBookings } = await supabase.from('bookings')
+        .select('id, dogs(size)')
+        .eq('groomer_id', slot.groomerId)
+        .eq('appointment_date', selectedDate)
+        .eq('appointment_time', slot.time)
+        .not('status', 'in', '("cancelled","no_show")');
+      
+      const freshTotal = (freshSlotBookings || []).length;
+      const freshLarge = (freshSlotBookings || []).filter(b => b.dogs?.size === 'large').length;
+      const breedInfo = BREED_DATABASE[selectedDog.breed];
+      const isLarge = breedInfo && breedInfo.weight > 35;
+      const slotConfig = schedules.find(s => s.date === selectedDate && s.time === slot.time && s.groomer_id === slot.groomerId);
+      const maxDogs = slotConfig?.max_dogs ?? 2;
+      const maxLarge = slotConfig?.max_large ?? 1;
+      
+      if (freshTotal >= maxDogs || (isLarge && freshLarge >= maxLarge)) {
+        alert('Sorry, this slot just filled up. Please choose a different time.');
+        setBookingSubmitting(false);
+        return;
+      }
+      
       const { error } = await supabase.from('bookings').insert([{ customer_id: user.id, dog_id: selectedDog.id, groomer_id: slot.groomerId, service_id: selectedService, appointment_date: selectedDate, appointment_time: slot.time, status: 'scheduled', notes: promoNotes + specialNotes + addOnNotes + vaxNotes, sms_consent: smsConsent, add_ons: selectedAddOns, add_on_names: addOnNames, add_ons_total: addOnsTotal }]);
       if (error) throw error;
       
@@ -4245,10 +4268,10 @@ export default function App() {
                         await logActivity('pet_deleted', 'dog', pet.id, `Deleted pet ${pet.name} from ${selectedCustomer?.name}`, { petName: pet.name });
                         await loadAllBookings();
                       }}
-                      className="absolute top-3 right-3 p-1 text-gray-300 hover:text-red-500 transition"
+                      className="absolute top-3 right-3 p-2 bg-red-100 hover:bg-red-200 text-red-500 hover:text-red-700 rounded-lg transition"
                       title="Delete pet"
                     >
-                      <X size={18} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 ))}
