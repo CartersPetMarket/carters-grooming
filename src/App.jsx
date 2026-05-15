@@ -2535,8 +2535,8 @@ export default function App() {
       c.email?.toLowerCase().includes(customerSearch.toLowerCase())
     );
 
-    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id) : [];
-    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id) : [];
+    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id && p.active !== false) : [];
+    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id && p.active !== false) : [];
 
     const uniqueGroomers = [...new Set(allBookings.map(b => b.groomers?.name).filter(Boolean))];
     
@@ -4209,27 +4209,48 @@ export default function App() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 {customerPets.map(pet => (
-                  <button 
+                  <div 
                     key={pet.id}
-                    onClick={() => { setSelectedPet(pet); loadPetHistory(pet.id); }}
-                    className="p-5 rounded-xl border-2 border-gray-200 hover:border-red-400 bg-gradient-to-br from-gray-50 to-white hover:from-red-50 hover:to-orange-50 transition text-left"
+                    className="p-5 rounded-xl border-2 border-gray-200 hover:border-red-400 bg-gradient-to-br from-gray-50 to-white hover:from-red-50 hover:to-orange-50 transition text-left relative"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-                        <Dog className="text-red-600" size={32} />
+                    <div className="cursor-pointer" onClick={() => { setSelectedPet(pet); loadPetHistory(pet.id); }}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                          <Dog className="text-red-600" size={32} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-xl text-gray-900">{pet.name}</h4>
+                          <p className="text-gray-600">{pet.breed}</p>
+                          {pet.vaccination?.rabies_status ? (
+                            <span className="inline-block mt-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full">✓ Rabies</span>
+                          ) : (
+                            <span className="inline-block mt-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">No Rabies</span>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-xl text-gray-900">{pet.name}</h4>
-                        <p className="text-gray-600">{pet.breed}</p>
-                        {pet.vaccination?.rabies_status ? (
-                          <span className="inline-block mt-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full">✓ Rabies</span>
-                        ) : (
-                          <span className="inline-block mt-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">No Rabies</span>
-                        )}
-                      </div>
+                      {pet.notes && <p className="mt-3 text-sm text-gray-500 bg-yellow-50 p-2 rounded-lg">📝 {pet.notes}</p>}
                     </div>
-                    {pet.notes && <p className="mt-3 text-sm text-gray-500 bg-yellow-50 p-2 rounded-lg">📝 {pet.notes}</p>}
-                  </button>
+                    <button 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const { data: bookings } = await supabase.from('bookings').select('id').eq('dog_id', pet.id).limit(1);
+                        if (bookings && bookings.length > 0) {
+                          if (!confirm(`${pet.name} has booking history. This will hide them (not delete). Continue?`)) return;
+                          await supabase.from('dogs').update({ active: false }).eq('id', pet.id);
+                        } else {
+                          if (!confirm(`Permanently delete ${pet.name}? This cannot be undone.`)) return;
+                          await supabase.from('pet_vaccinations').delete().eq('dog_id', pet.id);
+                          await supabase.from('dogs').delete().eq('id', pet.id);
+                        }
+                        await logActivity('pet_deleted', 'dog', pet.id, `Deleted pet ${pet.name} from ${selectedCustomer?.name}`, { petName: pet.name });
+                        await loadAllBookings();
+                      }}
+                      className="absolute top-3 right-3 p-1 text-gray-300 hover:text-red-500 transition"
+                      title="Delete pet"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 ))}
                 {customerPets.length === 0 && (
                   <div className="col-span-2 text-center py-8 bg-gray-50 rounded-xl">
@@ -4280,9 +4301,20 @@ export default function App() {
                       <p className="text-xl text-gray-600">{selectedPet.breed}</p>
                       <p className="text-gray-500">Owner: {selectedPet.customers?.name} • {selectedPet.customers?.phone}</p>
                     </div>
-                    <button onClick={() => { setEditingPetInfo(true); setEditPetData({ name: selectedPet.name || '', breed: selectedPet.breed || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
-                      ✏️ Edit
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingPetInfo(true); setEditPetData({ name: selectedPet.name || '', breed: selectedPet.breed || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
+                        ✏️ Edit
+                      </button>
+                      <button onClick={async () => {
+                        if (!confirm(`Remove ${selectedPet.name}? This won't delete booking history.`)) return;
+                        await supabase.from('dogs').update({ active: false }).eq('id', selectedPet.id);
+                        await logActivity('pet_removed', 'dog', selectedPet.id, `Removed pet ${selectedPet.name} from ${selectedCustomer?.name}`, { petName: selectedPet.name });
+                        await loadAllBookings();
+                        setSelectedPet(null);
+                      }} className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl transition flex items-center gap-2">
+                        🗑️ Remove
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
