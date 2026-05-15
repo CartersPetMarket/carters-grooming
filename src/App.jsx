@@ -622,8 +622,8 @@ export default function App() {
     setActivityLog(activityData || []);
 
     // Load walk-in sales (last 30 days for reports)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: walkInsData } = await supabase.from('walk_in_sales').select('*').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false });
+    const walkInCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: walkInsData } = await supabase.from('walk_in_sales').select('*').gte('created_at', walkInCutoff).order('created_at', { ascending: false });
     setAllWalkIns(walkInsData || []);
   };
 
