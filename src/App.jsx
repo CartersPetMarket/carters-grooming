@@ -180,7 +180,7 @@ const BREED_DATABASE = {
   'Wirehaired Pointer Griffon': { bath: 58, groom: 78, weight: 60 },
   'Yorkshire Terrier': { bath: 55, groom: 75, weight: 7 },
   'Mixed Breed (Small, under 20 lbs)': { bath: 48, groom: 65, weight: 15 },
-  'Mixed Breed (Medium, 20-50 lbs)': { bath: 55, groom: 75, weight: 35 },
+  'Mixed Breed (Medium, 20-50 lbs)': { bath: 55, groom: 75, weight: 36 },
   'Mixed Breed (Large, 50-80 lbs)': { bath: 65, groom: 90, weight: 65 },
   'Mixed Breed (XL, over 80 lbs)': { bath: 75, groom: 105, weight: 100 },
 };
