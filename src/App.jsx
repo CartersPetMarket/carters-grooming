@@ -263,8 +263,7 @@ export default function App() {
   const [petHistory, setPetHistory] = useState([]);
   const [editingPetNotes, setEditingPetNotes] = useState(false);
   const [petNotesText, setPetNotesText] = useState('');
-  const [customerDirectPets, setCustomerDirectPets] = useState([]);
-  const [fdDirectPets, setFdDirectPets] = useState([]);
+  const [editingCustomerInfo, setEditingCustomerInfo] = useState(false);
   const [editCustomerData, setEditCustomerData] = useState({ name: '', phone: '', email: '' });
   const [editingPetInfo, setEditingPetInfo] = useState(false);
   const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
@@ -1241,21 +1240,6 @@ export default function App() {
     setFdSearchResults(results);
   };
 
-  // Load pets directly from DB for a specific customer
-  const loadCustomerPets = async (customerId) => {
-    const { data, error } = await supabase.from('dogs')
-      .select('*, customers(name, phone, email)')
-      .eq('customer_id', customerId)
-      .neq('active', false)
-      .order('name');
-    if (error) console.error('Error loading pets:', error);
-    const pets = (data || []).map(p => {
-      const vax = allPets.find(ap => ap.id === p.id)?.vaccination || null;
-      return { ...p, vaccination: vax };
-    });
-    return pets;
-  };
-
   // Load past booking history for a customer
   const loadCustomerHistory = async (customerId) => {
     const { data } = await supabase
@@ -1334,9 +1318,6 @@ export default function App() {
       setFdSelectedPets([...fdSelectedPets, data[0]]);
       setFdShowNewPet(false);
       setFdNewPet({ name: '', breed: '' });
-      // Refresh direct pets list
-      const freshPets = await loadCustomerPets(fdSelectedCustomer.id);
-      setFdDirectPets(freshPets);
       // Auto-show vaccination entry for the new pet
       setFdShowVaxEntry(data[0].id);
       setFdVaxRabies('');
@@ -1859,7 +1840,6 @@ export default function App() {
       setFdCustomerHistory([]);
       setFdShowVaxEntry(null);
       setFdVaxRabies('');
-      setFdDirectPets([]);
     } catch (error) { alert(error.message); }
   };
 
@@ -2403,8 +2383,6 @@ export default function App() {
         await loadAllBookings();
         setAdminShowAddDog(false);
         setAdminNewDog({ name: '', breed: '' });
-        const freshPets = await loadCustomerPets(customerId);
-        setCustomerDirectPets(freshPets);
         await logActivity('pet_added', 'dog', data[0].id,
           `Added pet ${adminNewDog.name} (${adminNewDog.breed}) to ${selectedCustomer.name}`,
           { petName: adminNewDog.name, breed: adminNewDog.breed, customerName: selectedCustomer.name }
@@ -2580,8 +2558,8 @@ export default function App() {
       c.email?.toLowerCase().includes(customerSearch.toLowerCase())
     );
 
-    const customerPets = selectedCustomer ? (customerDirectPets.length > 0 ? customerDirectPets : allPets.filter(p => p.customer_id === selectedCustomer.id && p.active !== false)) : [];
-    const fdCustomerPets = fdSelectedCustomer ? (fdDirectPets.length > 0 ? fdDirectPets : allPets.filter(p => p.customer_id === fdSelectedCustomer.id && p.active !== false)) : [];
+    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id && p.active !== false) : [];
+    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id && p.active !== false) : [];
 
     const uniqueGroomers = [...new Set(allBookings.map(b => b.groomers?.name).filter(Boolean))];
     
@@ -3120,7 +3098,7 @@ export default function App() {
             <button onClick={() => { setAdminTab('frontdesk'); setFdSelectedCustomer(null); setFdSelectedPets([]); setFdPhoneSearch(''); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'frontdesk' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">📞</span><span className="hidden sm:inline">📞 Front Desk</span>
             </button>
-            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); setEditingCustomerInfo(false); setEditingPetInfo(false); setEditingVax(false); setAdminShowAddDog(false); setCustomerDirectPets([]); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            <button onClick={() => { setAdminTab('customers'); setSelectedCustomer(null); setSelectedPet(null); setEditingCustomerInfo(false); setEditingPetInfo(false); setEditingVax(false); setAdminShowAddDog(false); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'customers' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               <span className="sm:hidden">👤</span><span className="hidden sm:inline">👤 Customers</span>
             </button>
             <button onClick={() => { setAdminTab('reports'); }} className={`py-2 sm:py-3 px-1 sm:px-4 rounded-xl font-bold transition text-lg sm:text-base ${adminTab === 'reports' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -3814,7 +3792,7 @@ export default function App() {
                           return (
                             <button 
                               key={customer.id}
-                              onClick={async () => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); const pets = await loadCustomerPets(customer.id); setFdDirectPets(pets); loadAllBookings(); }}
+                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); loadAllBookings(); }}
                               className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
                             >
                               <p className="font-bold text-gray-900">{customer.name}</p>
@@ -4159,7 +4137,7 @@ export default function App() {
                   return (
                     <button 
                       key={customer.id} 
-                      onClick={async () => { setSelectedCustomer(customer); const pets = await loadCustomerPets(customer.id); setCustomerDirectPets(pets); loadAllBookings(); }}
+                      onClick={() => { setSelectedCustomer(customer); loadAllBookings(); }}
                       className="w-full p-5 rounded-xl border-2 border-gray-200 hover:border-red-400 bg-white hover:bg-red-50 transition text-left"
                     >
                       <div className="flex items-center justify-between">
