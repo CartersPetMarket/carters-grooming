@@ -3792,7 +3792,7 @@ export default function App() {
                           return (
                             <button 
                               key={customer.id}
-                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); }}
+                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); loadAllBookings(); }}
                               className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
                             >
                               <p className="font-bold text-gray-900">{customer.name}</p>
@@ -4137,7 +4137,7 @@ export default function App() {
                   return (
                     <button 
                       key={customer.id} 
-                      onClick={() => setSelectedCustomer(customer)}
+                      onClick={() => { setSelectedCustomer(customer); loadAllBookings(); }}
                       className="w-full p-5 rounded-xl border-2 border-gray-200 hover:border-red-400 bg-white hover:bg-red-50 transition text-left"
                     >
                       <div className="flex items-center justify-between">
