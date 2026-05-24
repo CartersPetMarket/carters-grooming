@@ -263,6 +263,7 @@ export default function App() {
   const [petHistory, setPetHistory] = useState([]);
   const [editingPetNotes, setEditingPetNotes] = useState(false);
   const [petNotesText, setPetNotesText] = useState('');
+  const [editingCustomerInfo, setEditingCustomerInfo] = useState(false);
   const [editCustomerData, setEditCustomerData] = useState({ name: '', phone: '', email: '' });
   const [editingPetInfo, setEditingPetInfo] = useState(false);
   const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
@@ -1239,7 +1240,18 @@ export default function App() {
     setFdSearchResults(results);
   };
 
-  // Load pets directly from DB for a specific customer
+  // Load past booking history for a customer
+  const loadCustomerHistory = async (customerId) => {
+    const { data } = await supabase
+      .from('bookings')
+      .select('*, dogs(name, breed), groomers(name), services(name)')
+      .eq('customer_id', customerId)
+      .order('appointment_date', { ascending: false })
+      .limit(20);
+    setFdCustomerHistory(data || []);
+  };
+
+  // Front Desk: Create new customer via Edge Function (creates auth account + sends invite email)
   const createFdCustomer = async () => {
     if (!fdNewCustomer.name || !fdNewCustomer.phone || !fdNewCustomer.email) {
       alert('Name, phone, and email are all required');
@@ -1306,7 +1318,6 @@ export default function App() {
       setFdSelectedPets([...fdSelectedPets, data[0]]);
       setFdShowNewPet(false);
       setFdNewPet({ name: '', breed: '' });
-      // Refresh direct pets list
       // Auto-show vaccination entry for the new pet
       setFdShowVaxEntry(data[0].id);
       setFdVaxRabies('');
@@ -2547,8 +2558,8 @@ export default function App() {
       c.email?.toLowerCase().includes(customerSearch.toLowerCase())
     );
 
-    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id) : [];
-    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id) : [];
+    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id && p.active !== false) : [];
+    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id && p.active !== false) : [];
 
     const uniqueGroomers = [...new Set(allBookings.map(b => b.groomers?.name).filter(Boolean))];
     
