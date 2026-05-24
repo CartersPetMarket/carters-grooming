@@ -263,7 +263,6 @@ export default function App() {
   const [petHistory, setPetHistory] = useState([]);
   const [editingPetNotes, setEditingPetNotes] = useState(false);
   const [petNotesText, setPetNotesText] = useState('');
-  const [editingCustomerInfo, setEditingCustomerInfo] = useState(false);
   const [editCustomerData, setEditCustomerData] = useState({ name: '', phone: '', email: '' });
   const [editingPetInfo, setEditingPetInfo] = useState(false);
   const [editPetData, setEditPetData] = useState({ name: '', breed: '' });
@@ -577,18 +576,18 @@ export default function App() {
 
   const loadAllBookings = async () => {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', thirtyDaysAgo).order('appointment_date', { ascending: true });
-    const { data: allVax } = await supabase.from('pet_vaccinations').select('*');
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', thirtyDaysAgo).order('appointment_date', { ascending: true }).limit(5000);
+    const { data: allVax } = await supabase.from('pet_vaccinations').select('*').limit(5000);
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
     setAllBookings((data || []).map(b => ({ ...b, vaccination: vaxMap[b.dogs?.id] })));
     
     // Load all customers for admin
-    const { data: customersData } = await supabase.from('customers').select('*').order('name');
+    const { data: customersData } = await supabase.from('customers').select('*').order('name').limit(5000);
     setAllCustomers(customersData || []);
     
     // Load all pets for admin
-    const { data: petsData } = await supabase.from('dogs').select('*, customers(name, phone, email)').order('name');
+    const { data: petsData } = await supabase.from('dogs').select('*, customers(name, phone, email)').order('name').limit(5000);
     setAllPets((petsData || []).map(p => ({ ...p, vaccination: vaxMap[p.id] })));
 
     // Load all groomers for admin
@@ -1240,18 +1239,7 @@ export default function App() {
     setFdSearchResults(results);
   };
 
-  // Load past booking history for a customer
-  const loadCustomerHistory = async (customerId) => {
-    const { data } = await supabase
-      .from('bookings')
-      .select('*, dogs(name, breed), groomers(name), services(name)')
-      .eq('customer_id', customerId)
-      .order('appointment_date', { ascending: false })
-      .limit(20);
-    setFdCustomerHistory(data || []);
-  };
-
-  // Front Desk: Create new customer via Edge Function (creates auth account + sends invite email)
+  // Load pets directly from DB for a specific customer
   const createFdCustomer = async () => {
     if (!fdNewCustomer.name || !fdNewCustomer.phone || !fdNewCustomer.email) {
       alert('Name, phone, and email are all required');
@@ -1318,6 +1306,7 @@ export default function App() {
       setFdSelectedPets([...fdSelectedPets, data[0]]);
       setFdShowNewPet(false);
       setFdNewPet({ name: '', breed: '' });
+      // Refresh direct pets list
       // Auto-show vaccination entry for the new pet
       setFdShowVaxEntry(data[0].id);
       setFdVaxRabies('');
@@ -2558,8 +2547,8 @@ export default function App() {
       c.email?.toLowerCase().includes(customerSearch.toLowerCase())
     );
 
-    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id && p.active !== false) : [];
-    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id && p.active !== false) : [];
+    const customerPets = selectedCustomer ? allPets.filter(p => p.customer_id === selectedCustomer.id) : [];
+    const fdCustomerPets = fdSelectedCustomer ? allPets.filter(p => p.customer_id === fdSelectedCustomer.id) : [];
 
     const uniqueGroomers = [...new Set(allBookings.map(b => b.groomers?.name).filter(Boolean))];
     
@@ -3792,7 +3781,7 @@ export default function App() {
                           return (
                             <button 
                               key={customer.id}
-                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); loadAllBookings(); }}
+                              onClick={() => { setFdSelectedCustomer(customer); setFdSearchResults([]); setFdPhoneSearch(''); loadCustomerHistory(customer.id); }}
                               className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-red-400 hover:bg-red-50 transition text-left"
                             >
                               <p className="font-bold text-gray-900">{customer.name}</p>
@@ -4137,7 +4126,7 @@ export default function App() {
                   return (
                     <button 
                       key={customer.id} 
-                      onClick={() => { setSelectedCustomer(customer); loadAllBookings(); }}
+                      onClick={() => setSelectedCustomer(customer)}
                       className="w-full p-5 rounded-xl border-2 border-gray-200 hover:border-red-400 bg-white hover:bg-red-50 transition text-left"
                     >
                       <div className="flex items-center justify-between">
