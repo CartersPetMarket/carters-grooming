@@ -577,7 +577,7 @@ export default function App() {
 
   const loadAllBookings = async () => {
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', fourteenDaysAgo).order('appointment_date', { ascending: true }).limit(5000);
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, phone2, email)').gte('appointment_date', fourteenDaysAgo).order('appointment_date', { ascending: true }).limit(5000);
     const { data: allVax } = await supabase.from('pet_vaccinations').select('*').limit(5000);
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
@@ -588,7 +588,7 @@ export default function App() {
     setAllCustomers(customersData || []);
     
     // Load all pets for admin
-    const { data: petsData } = await supabase.from('dogs').select('*, customers(name, phone, email)').order('name').limit(5000);
+    const { data: petsData } = await supabase.from('dogs').select('*, customers(name, phone, phone2, email)').order('name').limit(5000);
     setAllPets((petsData || []).map(p => ({ ...p, vaccination: vaxMap[p.id] })));
 
     // Load all groomers for admin
@@ -2289,6 +2289,7 @@ export default function App() {
         const { error } = await supabase.from('customers').update({
           name: editCustomerData.name.trim(),
           phone: editCustomerData.phone.trim(),
+          phone2: editCustomerData.phone2?.trim() || null,
           email: editCustomerData.email.trim()
         }).eq('id', customerId);
         if (error) throw error;
@@ -3471,8 +3472,8 @@ export default function App() {
                           
                           <div className="text-gray-600 text-xs sm:text-sm mt-2">
                             <span className="font-semibold">Owner:</span> {booking.customers?.name}
-                            <span className="hidden sm:inline"> • {booking.customers?.phone} • {booking.customers?.email}</span>
-                            <div className="sm:hidden text-xs mt-1">{booking.customers?.phone}</div>
+                            <span className="hidden sm:inline"> • {booking.customers?.phone}{booking.customers?.phone2 && ` / ${booking.customers.phone2}`} • {booking.customers?.email}</span>
+                            <div className="sm:hidden text-xs mt-1">{booking.customers?.phone}{booking.customers?.phone2 && ` / ${booking.customers.phone2}`}</div>
                           </div>
                           {/* Groomer Notes - condensed on mobile */}
                           <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
@@ -4179,6 +4180,7 @@ export default function App() {
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1">Phone</label>
                       <input type="tel" value={editCustomerData.phone} onChange={(e) => setEditCustomerData({ ...editCustomerData, phone: e.target.value })} className="w-full p-3 border-2 border-gray-300 rounded-xl" />
+                      <input type="tel" value={editCustomerData.phone2 || ''} onChange={(e) => setEditCustomerData({ ...editCustomerData, phone2: e.target.value })} placeholder="Alt phone (optional)" className="w-full p-3 border-2 border-gray-300 rounded-xl mt-2" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-600 mb-1">Email</label>
@@ -4194,6 +4196,7 @@ export default function App() {
                     <div>
                       <h2 className="text-3xl font-black text-gray-900">{selectedCustomer.name}</h2>
                       <p className="text-lg text-gray-600 mt-2">📞 {selectedCustomer.phone}</p>
+                      {selectedCustomer.phone2 && <p className="text-lg text-gray-600">📞 {selectedCustomer.phone2} <span className="text-sm text-gray-400">(alt)</span></p>}
                       <p className="text-lg text-gray-600">✉️ {selectedCustomer.email}</p>
                       {selectedCustomer.email && (
                         <button onClick={async () => {
@@ -4209,7 +4212,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    <button onClick={() => { setEditingCustomerInfo(true); setEditCustomerData({ name: selectedCustomer.name || '', phone: selectedCustomer.phone || '', email: selectedCustomer.email || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
+                    <button onClick={() => { setEditingCustomerInfo(true); setEditCustomerData({ name: selectedCustomer.name || '', phone: selectedCustomer.phone || '', phone2: selectedCustomer.phone2 || '', email: selectedCustomer.email || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
                       ✏️ Edit
                     </button>
                   </div>
