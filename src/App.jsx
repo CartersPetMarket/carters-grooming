@@ -4198,17 +4198,14 @@ export default function App() {
                       {selectedCustomer.email && (
                         <button onClick={async () => {
                           try {
-                            const response = await fetch('https://wpvoejdfvuhsrfderhpo.supabase.co/functions/v1/create-customer', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g' },
-                              body: JSON.stringify({ email: selectedCustomer.email, phone: selectedCustomer.phone, name: selectedCustomer.name })
+                            const { error } = await supabase.auth.resetPasswordForEmail(selectedCustomer.email, {
+                              redirectTo: 'https://grooming.carterspetmarket.com'
                             });
-                            const result = await response.json();
-                            if (!response.ok) throw new Error(result.error);
-                            alert('✅ Invite email resent to ' + selectedCustomer.email);
+                            if (error) throw error;
+                            alert('✅ Account setup email sent to ' + selectedCustomer.email);
                           } catch (error) { alert('Error: ' + error.message); }
                         }} className="mt-2 px-3 py-1 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg text-sm transition">
-                          📧 Resend Invite Email
+                          📧 Send Account Setup Email
                         </button>
                       )}
                     </div>
