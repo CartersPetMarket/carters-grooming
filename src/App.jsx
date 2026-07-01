@@ -576,8 +576,8 @@ export default function App() {
   };
 
   const loadAllBookings = async () => {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', thirtyDaysAgo).order('appointment_date', { ascending: true }).limit(5000);
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { data } = await supabase.from('bookings').select('*, dogs(id, name, breed, size, customer_id, notes), groomers(id, name), services(name), customers(name, phone, email)').gte('appointment_date', fourteenDaysAgo).order('appointment_date', { ascending: true }).limit(5000);
     const { data: allVax } = await supabase.from('pet_vaccinations').select('*').limit(5000);
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
@@ -4195,6 +4195,22 @@ export default function App() {
                       <h2 className="text-3xl font-black text-gray-900">{selectedCustomer.name}</h2>
                       <p className="text-lg text-gray-600 mt-2">📞 {selectedCustomer.phone}</p>
                       <p className="text-lg text-gray-600">✉️ {selectedCustomer.email}</p>
+                      {selectedCustomer.email && (
+                        <button onClick={async () => {
+                          try {
+                            const response = await fetch('https://wpvoejdfvuhsrfderhpo.supabase.co/functions/v1/create-customer', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g' },
+                              body: JSON.stringify({ email: selectedCustomer.email, phone: selectedCustomer.phone, name: selectedCustomer.name })
+                            });
+                            const result = await response.json();
+                            if (!response.ok) throw new Error(result.error);
+                            alert('✅ Invite email resent to ' + selectedCustomer.email);
+                          } catch (error) { alert('Error: ' + error.message); }
+                        }} className="mt-2 px-3 py-1 bg-green-100 hover:bg-green-200 text-green-700 font-semibold rounded-lg text-sm transition">
+                          📧 Resend Invite Email
+                        </button>
+                      )}
                     </div>
                     <button onClick={() => { setEditingCustomerInfo(true); setEditCustomerData({ name: selectedCustomer.name || '', phone: selectedCustomer.phone || '', email: selectedCustomer.email || '' }); }} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold rounded-xl transition flex items-center gap-2">
                       ✏️ Edit
@@ -4510,7 +4526,7 @@ export default function App() {
                   <button 
                     onClick={async () => {
                       // Load bookings
-                      let query = supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').gte('appointment_date', reportStartDate).lte('appointment_date', reportEndDate).not('status', 'in', '("cancelled","no_show")').order('appointment_date', { ascending: true });
+                      let query = supabase.from('bookings').select('*, dogs(name, breed), groomers(name), services(name)').gte('appointment_date', reportStartDate).lte('appointment_date', reportEndDate).not('status', 'in', '("cancelled","no_show")').order('appointment_date', { ascending: true }).limit(5000);
                       const { data } = await query;
                       const filtered = reportGroomer === 'all' ? data : data?.filter(b => b.groomers?.name === reportGroomer);
                       setReportData(filtered || []);
