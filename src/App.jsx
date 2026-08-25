@@ -7,6 +7,49 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indwdm9lamRmdnVoc3JmZGVyaHBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNjY3NjIsImV4cCI6MjA4Mzg0Mjc2Mn0.Pwe7wnUITAdxlKYaEFUrDud4Ij4EwULzdH3WAwn4m7g'
 );
 
+const REPORT_CARD_SECTIONS = [
+  { key: 'coat', label: 'Coat & Skin', items: [
+    { k: 'none', l: 'No concerns' },
+    { k: 'itching', l: 'Itching or scratching' },
+    { k: 'dry_skin', l: 'Dry skin / coat' },
+    { k: 'hot_spots', l: 'Hot spots or irritation' },
+    { k: 'shedding', l: 'Loose coat (shedding)' },
+    { k: 'mats', l: 'Tangles or mats' }
+  ] },
+  { key: 'ears', label: 'Ears & Eyes', items: [
+    { k: 'none', l: 'No concerns' },
+    { k: 'tear_staining', l: 'Tear staining' },
+    { k: 'waxy', l: 'Waxy buildup' },
+    { k: 'irritation', l: 'Irritation or odor' }
+  ] },
+  { key: 'teeth', label: 'Teeth & Gums', items: [
+    { k: 'none', l: 'No concerns' },
+    { k: 'breath_odor', l: 'Breath odor' },
+    { k: 'light_tartar', l: 'Light tartar' },
+    { k: 'heavy_tartar', l: 'Heavy tartar' }
+  ] },
+  { key: 'nails', label: 'Nails & Paws', items: [
+    { k: 'none', l: 'No concerns' },
+    { k: 'licking', l: 'Licking at paws' },
+    { k: 'red_irritated', l: 'Red or irritated' },
+    { k: 'dry_cracked_pads', l: 'Dry or cracked pads' },
+    { k: 'odor_between_toes', l: 'Odor between toes' }
+  ] }
+];
+
+const REPORT_CARD_STATUSES = [
+  { k: 'great', l: 'Great', on: 'bg-green-500 text-white border-green-500' },
+  { k: 'eye', l: 'Keep an Eye', on: 'bg-amber-500 text-white border-amber-500' },
+  { k: 'talk', l: "Let's Talk", on: 'bg-red-500 text-white border-red-500' }
+];
+
+const reportCardPillClass = (statusKey) => {
+  if (statusKey === 'great') return 'bg-green-100 text-green-800';
+  if (statusKey === 'eye') return 'bg-amber-100 text-amber-800';
+  if (statusKey === 'talk') return 'bg-red-100 text-red-800';
+  return 'bg-gray-100 text-gray-500';
+};
+
 const BREED_DATABASE = {
   'Affenpinscher': { bath: 45, groom: 65, weight: 9 },
   'Afghan Hound': { bath: 65, groom: 85, weight: 55 },
@@ -276,6 +319,10 @@ export default function App() {
   const [rescheduling, setRescheduling] = useState(false);
   const [editingGroomerNotes, setEditingGroomerNotes] = useState(null);
   const [groomerNotesText, setGroomerNotesText] = useState('');
+  const [reportCards, setReportCards] = useState({});
+  const [expandedReportCard, setExpandedReportCard] = useState(null);
+  const [reportCardDraft, setReportCardDraft] = useState({});
+  const [savingReportCard, setSavingReportCard] = useState(false);
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
   const [reportEndDate, setReportEndDate] = useState(getLocalToday());
   const [reportGroomer, setReportGroomer] = useState('all');
@@ -582,6 +629,12 @@ export default function App() {
     const vaxMap = {};
     (allVax || []).forEach(v => { vaxMap[v.dog_id] = v; });
     setAllBookings((data || []).map(b => ({ ...b, vaccination: vaxMap[b.dogs?.id] })));
+
+    // Load report cards for the same window
+    const { data: reportCardRows } = await supabase.from('grooming_report_cards').select('*').gte('created_at', fourteenDaysAgo).limit(5000);
+    const reportCardMap = {};
+    (reportCardRows || []).forEach(r => { reportCardMap[r.booking_id] = r; });
+    setReportCards(reportCardMap);
     
     // Load all customers for admin
     const { data: customersData } = await supabase.from('customers').select('*').order('name').limit(5000);
@@ -2520,6 +2573,63 @@ export default function App() {
       setGroomerNotesText('');
     };
 
+    const isReportCardFilled = (bookingId) => {
+      const c = reportCards[bookingId]?.card;
+      if (!c || typeof c !== 'object') return false;
+      return REPORT_CARD_SECTIONS.some(sec => c[sec.key]?.s || (c[sec.key]?.c || []).length > 0);
+    };
+
+    const openReportCard = (booking) => {
+      const existing = reportCards[booking.id]?.card;
+      setReportCardDraft(existing && typeof existing === 'object' ? JSON.parse(JSON.stringify(existing)) : {});
+      setExpandedReportCard(booking.id);
+    };
+
+    const setReportCardStatus = (sectionKey, statusKey) => {
+      setReportCardDraft(prev => {
+        const sec = prev[sectionKey] || {};
+        return { ...prev, [sectionKey]: { ...sec, s: sec.s === statusKey ? null : statusKey } };
+      });
+    };
+
+    const toggleReportCardItem = (sectionKey, itemKey) => {
+      setReportCardDraft(prev => {
+        const sec = prev[sectionKey] || {};
+        const cur = Array.isArray(sec.c) ? sec.c : [];
+        let next;
+        if (cur.includes(itemKey)) next = cur.filter(x => x !== itemKey);
+        else if (itemKey === 'none') next = ['none'];
+        else next = [...cur.filter(x => x !== 'none'), itemKey];
+        return { ...prev, [sectionKey]: { ...sec, c: next } };
+      });
+    };
+
+    const saveReportCard = async (booking) => {
+      if (savingReportCard) return;
+      setSavingReportCard(true);
+      try {
+        const { data: savedRows, error } = await supabase.from('grooming_report_cards').upsert({
+          booking_id: booking.id,
+          dog_id: booking.dogs?.id || null,
+          card: reportCardDraft,
+          staff_name: currentStaff?.name || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'booking_id' }).select();
+        if (error) { alert('Error saving report card: ' + error.message); return; }
+        if (savedRows && savedRows[0]) setReportCards(prev => ({ ...prev, [booking.id]: savedRows[0] }));
+        setExpandedReportCard(null);
+      } catch (err) {
+        alert('Error saving report card: ' + err.message);
+      } finally {
+        setSavingReportCard(false);
+      }
+    };
+
+    const confirmReadyWithoutCard = (booking) => {
+      if (isReportCardFilled(booking.id)) return true;
+      return window.confirm('No report card has been filled out for ' + (booking.dogs?.name || 'this dog') + '. Mark as Ready anyway?');
+    };
+
     const addCustomCharge = async (bookingId) => {
       if (!newChargeName || !newChargePrice) return;
       const booking = allBookings.find(b => b.id === bookingId);
@@ -3177,7 +3287,7 @@ export default function App() {
                             <button onClick={() => updateBookingStatus(booking.id, 'in_progress', booking)} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm">🔄 Start</button>
                           )}
                           {booking.status === 'in_progress' && (
-                            <button onClick={() => updateBookingStatus(booking.id, 'ready', booking)} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-sm">🐾 Ready</button>
+                            <button onClick={() => { if (confirmReadyWithoutCard(booking)) updateBookingStatus(booking.id, 'ready', booking); }} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-sm">🐾 Ready</button>
                           )}
                           {booking.status === 'ready' && (
                             <span className="flex-1 py-2 text-center text-emerald-700 font-bold text-sm bg-emerald-100 rounded-lg">Waiting for family pickup</span>
@@ -3496,6 +3606,69 @@ export default function App() {
                               <button onClick={() => { setEditingGroomerNotes(booking.dogs?.id); setGroomerNotesText(''); }} className="text-purple-600 hover:text-purple-800 font-semibold text-sm">🐕 + Add Groomer Notes</button>
                             )}
                           </div>
+                          {/* Report Card */}
+                          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-teal-50 rounded-xl border-2 border-teal-200">
+                            {expandedReportCard === booking.id ? (
+                              <div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-xs font-bold text-teal-700 uppercase">📋 Report Card</p>
+                                  <button onClick={() => setExpandedReportCard(null)} className="text-teal-600 hover:text-teal-800 font-semibold text-xs">Hide ▲</button>
+                                </div>
+                                {REPORT_CARD_SECTIONS.map(section => (
+                                  <div key={section.key} className="mb-3 pb-3 border-b border-teal-200 last:border-b-0 last:mb-0 last:pb-0">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                      <span className="text-sm font-bold text-gray-700">{section.label}</span>
+                                      <div className="flex gap-1">
+                                        {REPORT_CARD_STATUSES.map(st => (
+                                          <button
+                                            key={st.k}
+                                            onClick={() => setReportCardStatus(section.key, st.k)}
+                                            className={`px-2 py-1 rounded-full text-xs font-bold border-2 ${reportCardDraft[section.key]?.s === st.k ? st.on : 'bg-white text-gray-600 border-gray-300'}`}
+                                          >
+                                            {st.l}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+                                      {section.items.map(item => (
+                                        <label key={item.k} className="flex items-center gap-2 text-sm text-gray-700">
+                                          <input
+                                            type="checkbox"
+                                            checked={(reportCardDraft[section.key]?.c || []).includes(item.k)}
+                                            onChange={() => toggleReportCardItem(section.key, item.k)}
+                                            className="w-4 h-4"
+                                          />
+                                          {item.l}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                <div className="flex items-center gap-2 mt-3">
+                                  <button onClick={() => saveReportCard(booking)} disabled={savingReportCard} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-bold rounded-lg text-sm">{savingReportCard ? 'Saving...' : 'Save Report Card'}</button>
+                                  <button onClick={() => setExpandedReportCard(null)} className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-lg text-sm">Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button onClick={() => openReportCard(booking)} className="w-full flex flex-wrap items-center justify-between gap-2 text-left">
+                                <span className="flex flex-wrap items-center gap-1">
+                                  <span className="text-xs font-bold text-teal-700 uppercase mr-1">📋 Report Card</span>
+                                  {isReportCardFilled(booking.id) ? REPORT_CARD_SECTIONS.map(section => (
+                                    <span key={section.key} className={`px-2 py-0.5 rounded-full text-xs font-bold ${reportCardPillClass(reportCards[booking.id]?.card?.[section.key]?.s)}`}>
+                                      {section.label.split(' ')[0]}
+                                    </span>
+                                  )) : (
+                                    <span className="text-sm text-gray-500">Not filled out</span>
+                                  )}
+                                </span>
+                                <span className="text-teal-600 font-semibold text-xs">{isReportCardFilled(booking.id) ? 'Edit ▼' : 'Fill Out ▼'}</span>
+                              </button>
+                            )}
+                            {isReportCardFilled(booking.id) && expandedReportCard !== booking.id && reportCards[booking.id]?.staff_name && (
+                              <p className="text-xs text-gray-500 mt-1">Saved by {reportCards[booking.id].staff_name}</p>
+                            )}
+                          </div>
                           {booking.notes && booking.notes.includes('🏷️ PROMO:') && (
                             <div className="mt-2 px-3 py-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg flex items-center gap-2">
                               <span className="text-lg">🏷️</span>
@@ -3575,7 +3748,7 @@ export default function App() {
                               )}
                               {booking.status === 'in_progress' && (
                                 <button 
-                                  onClick={() => updateBookingStatus(booking.id, 'ready', booking)}
+                                  onClick={() => { if (confirmReadyWithoutCard(booking)) updateBookingStatus(booking.id, 'ready', booking); }}
                                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-sm flex items-center gap-2"
                                 >
                                   🐾 Ready for Pickup
