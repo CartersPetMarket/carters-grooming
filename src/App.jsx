@@ -34,6 +34,14 @@ const REPORT_CARD_SECTIONS = [
     { k: 'red_irritated', l: 'Red or irritated' },
     { k: 'dry_cracked_pads', l: 'Dry or cracked pads' },
     { k: 'odor_between_toes', l: 'Odor between toes' }
+  ] },
+  { key: 'mobility', label: 'Mobility & Joints', items: [
+    { k: 'none', l: 'No concerns' },
+    { k: 'step_hesitation', l: 'Hesitant on / off the table' },
+    { k: 'sat_during_groom', l: 'Sat down during the groom' },
+    { k: 'rear_leg_lift', l: 'Hard to lift rear legs' },
+    { k: 'limping', l: 'Limping or favoring a leg' },
+    { k: 'unsteady', l: 'Slipping or unsteady' }
   ] }
 ];
 
