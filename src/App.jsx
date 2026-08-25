@@ -323,6 +323,7 @@ export default function App() {
   const [expandedReportCard, setExpandedReportCard] = useState(null);
   const [reportCardDraft, setReportCardDraft] = useState({});
   const [savingReportCard, setSavingReportCard] = useState(false);
+  const [petReportCards, setPetReportCards] = useState({});
   const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().slice(0, 8) + '01');
   const [reportEndDate, setReportEndDate] = useState(getLocalToday());
   const [reportGroomer, setReportGroomer] = useState('all');
@@ -2661,6 +2662,10 @@ export default function App() {
     const loadPetHistory = async (dogId) => {
       const { data } = await supabase.from('bookings').select('*, groomers(name), services(name)').eq('dog_id', dogId).order('appointment_date', { ascending: false });
       setPetHistory(data || []);
+      const { data: petCardRows } = await supabase.from('grooming_report_cards').select('*').eq('dog_id', dogId).limit(5000);
+      const petCardMap = {};
+      (petCardRows || []).forEach(c => { petCardMap[c.booking_id] = c; });
+      setPetReportCards(petCardMap);
     };
 
     const filteredCustomers = allCustomers.filter(c => 
@@ -4666,6 +4671,25 @@ export default function App() {
                           </span>
                         </div>
                         {h.notes && <p className="mt-2 text-sm text-gray-500 bg-gray-50 p-2 rounded">📝 {h.notes}</p>}
+                        {petReportCards[h.id] && (
+                          <div className="mt-2 p-2 bg-teal-50 rounded-lg border border-teal-200">
+                            <div className="flex flex-wrap items-center gap-1 mb-1">
+                              <span className="text-xs font-bold text-teal-700 uppercase mr-1">📋 Report Card</span>
+                              {REPORT_CARD_SECTIONS.map(section => (
+                                <span key={section.key} className={`px-2 py-0.5 rounded-full text-xs font-bold ${reportCardPillClass(petReportCards[h.id].card?.[section.key]?.s)}`}>
+                                  {section.label.split(' ')[0]}
+                                </span>
+                              ))}
+                            </div>
+                            {REPORT_CARD_SECTIONS.map(section => {
+                              const flagged = (petReportCards[h.id].card?.[section.key]?.c || []).filter(k => k !== 'none');
+                              if (flagged.length === 0) return null;
+                              const labels = flagged.map(k => section.items.find(i => i.k === k)?.l).filter(Boolean).join(', ');
+                              return <p key={section.key} className="text-xs text-gray-600">{section.label}: {labels}</p>;
+                            })}
+                            {petReportCards[h.id].staff_name && <p className="text-xs text-gray-400 mt-1">Saved by {petReportCards[h.id].staff_name}</p>}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
