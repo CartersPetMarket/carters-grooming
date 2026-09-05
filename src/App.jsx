@@ -246,6 +246,8 @@ const ADD_ON_SERVICES = [
   { id: 'paw_nose_butter', name: 'Paw & Nose Butter', price: 10 },
   { id: 'tick_removal', name: 'Tick Removal', price: 15 },
   { id: 'furminator', name: 'Furminator', price: 30 },
+  { id: 'lux_silent_grove', name: 'Luxury Spa Package — Silent Grove Scent', price: 15 },
+  { id: 'lux_blush_garden', name: 'Luxury Spa Package — Blush Garden Scent', price: 15 },
 ];
 
 // Walk-in services (includes add-ons plus walk-in specific services)
